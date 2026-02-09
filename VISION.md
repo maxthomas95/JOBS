@@ -316,18 +316,28 @@ open http://your-proxmox-host:8780
 
 ## Milestones
 
+### Pre-M1 Remediation (docs/architecture-review/05-pre-m1-remediation.md)
+> Blocking architecture fixes before M1 implementation.
+
+- [x] React 19 + PixiJS 8 stack and no StrictMode in `main.tsx`
+- [x] chokidar updated to v5-compatible directory watch + filter approach (no glob dependency)
+- [x] Extracted bridge core modules + custom session manager lifecycle handling
+- [x] WebSocket snapshot-on-connect hydration
+- [x] Ghost timeout handling for stale sessions
+- [x] M1 reduced-scope decisions applied (linear interpolation, 4 core event types)
+
 ### M1: Proof of Life (1-2 sessions)
 > Get a character moving on screen driven by real Claude Code events.
 
-- [ ] Scaffold project (Vite + React + TypeScript)
-- [ ] Extract bridge core from pixelhq-bridge (4 files)
-- [ ] Simple WebSocket server broadcasting events
-- [ ] Basic PixiJS canvas with one hardcoded office room
-- [ ] One character sprite (a16z/ai-town) responding to WS events
-- [ ] State machine: idle → walk to desk → type → walk to whiteboard → think
-- [ ] A* pathfinding between station positions
-- [ ] Wire to real `~/.claude` session files
-- **Deliverable:** Real coding session → character animates on screen
+- [x] Scaffold project (Vite + React + TypeScript)
+- [x] Extract bridge core from pixelhq-bridge (5 files + local adaptation)
+- [x] Simple WebSocket server broadcasting events
+- [x] Basic PixiJS canvas with one hardcoded office room
+- [x] One character sprite (a16z/ai-town) responding to WS events
+- [x] State machine: idle -> walk to desk -> type -> walk to whiteboard -> think (M1 simplified mapping)
+- [x] Linear interpolation between station positions (A* deferred to M2 per pre-M1 remediation)
+- [x] Wire to real `~/.claude` session files
+- **Deliverable:** Real coding session -> character animates on screen
 
 ### M2: Multi-Agent Office (1-2 sessions)
 > Multiple characters, desk assignment, full event mapping.

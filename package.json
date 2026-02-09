@@ -1,0 +1,46 @@
+{
+  "name": "jobs",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev:client": "vite --port 5173",
+    "dev:server": "tsx watch server/index.ts",
+    "dev": "concurrently \"npm:dev:client\" \"npm:dev:server\"",
+    "build": "tsc -b && vite build && tsc -p server/tsconfig.json",
+    "start": "node dist-server/server/index.js",
+    "lint": "eslint .",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@pixi/react": "^8.0.0",
+    "chokidar": "^5.0.0",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.0",
+    "pixi.js": "^8.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "uuid": "^9.0.1",
+    "ws": "^8.16.0",
+    "zustand": "^5.0.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.1",
+    "@types/express": "^5.0.0",
+    "@types/node": "^24.10.1",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@types/uuid": "^10.0.0",
+    "@types/ws": "^8.18.0",
+    "@vitejs/plugin-react": "^4.0.0",
+    "concurrently": "^9.0.0",
+    "eslint": "^9.39.1",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint-plugin-react-refresh": "^0.4.24",
+    "globals": "^16.5.0",
+    "tsx": "^4.0.0",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.46.4",
+    "vite": "^6.0.0"
+  }
+}

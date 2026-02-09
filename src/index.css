@@ -1,0 +1,24 @@
+:root {
+  font-family: 'IBM Plex Mono', 'Fira Code', monospace;
+  color: #e8edf5;
+  background: #151924;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background:
+    radial-gradient(circle at 10% 20%, rgba(82, 100, 141, 0.18), transparent 45%),
+    radial-gradient(circle at 80% 0%, rgba(24, 83, 59, 0.25), transparent 35%),
+    #12161f;
+}
