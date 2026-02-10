@@ -29,6 +29,7 @@ export interface WatchSessionPayload {
   sessionId: string;
   agentId: string;
   filePath: string;
+  isSubAgent?: boolean;
 }
 
 export interface WatchLinePayload {

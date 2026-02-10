@@ -26,6 +26,16 @@ export function renderTileMap(container: Container): void {
   g.rect(STATIONS.terminal.x * TILE_SIZE, STATIONS.terminal.y * TILE_SIZE, TILE_SIZE * 2, TILE_SIZE).fill(0x111722);
   g.rect(STATIONS.terminal.x * TILE_SIZE + 1, STATIONS.terminal.y * TILE_SIZE + 1, TILE_SIZE * 2 - 2, TILE_SIZE - 2).stroke({ color: 0x2ee65e, width: 1 });
 
+  // Library / bookshelf
+  g.rect(STATIONS.library.x * TILE_SIZE, STATIONS.library.y * TILE_SIZE, TILE_SIZE * 3, TILE_SIZE).fill(0x5c3a1e);
+  g.rect(STATIONS.library.x * TILE_SIZE + 2, STATIONS.library.y * TILE_SIZE + 3, TILE_SIZE - 4, TILE_SIZE - 6).fill(0xd4a574);
+  g.rect(STATIONS.library.x * TILE_SIZE + TILE_SIZE + 2, STATIONS.library.y * TILE_SIZE + 3, TILE_SIZE - 4, TILE_SIZE - 6).fill(0xc49a6c);
+  g.rect(STATIONS.library.x * TILE_SIZE + TILE_SIZE * 2 + 2, STATIONS.library.y * TILE_SIZE + 3, TILE_SIZE - 4, TILE_SIZE - 6).fill(0xb8906a);
+
+  // Coffee machine
+  g.rect(STATIONS.coffee.x * TILE_SIZE, STATIONS.coffee.y * TILE_SIZE, TILE_SIZE * 2, TILE_SIZE).fill(0x3d2b1f);
+  g.rect(STATIONS.coffee.x * TILE_SIZE + 3, STATIONS.coffee.y * TILE_SIZE + 2, TILE_SIZE - 4, TILE_SIZE - 4).fill(0x8b4513);
+
   g.rect(STATIONS.door.x * TILE_SIZE, STATIONS.door.y * TILE_SIZE, TILE_SIZE, TILE_SIZE).stroke({ color: 0xe3d7c0, width: 1 });
 
   container.addChild(g);

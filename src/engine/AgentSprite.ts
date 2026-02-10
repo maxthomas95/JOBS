@@ -1,6 +1,8 @@
 import { AnimatedSprite, Container, Spritesheet, Texture, SCALE_MODES } from 'pixi.js';
 import type { Agent } from '../types/agent.js';
+import type { Point } from '../types/agent.js';
 import { characterData } from '../assets/sprites/characters.js';
+import { findPath } from './Pathfinder.js';
 import atlasUrl from '../assets/sprites/32x32folk.png';
 
 type Direction = 'up' | 'down' | 'left' | 'right';
@@ -8,6 +10,10 @@ type Direction = 'up' | 'down' | 'left' | 'right';
 interface AgentVisual {
   sprite: AnimatedSprite;
   phase: number;
+  /** Remaining waypoints the agent is walking toward. */
+  waypoints: Point[];
+  /** The targetPosition that generated the current waypoints (for change detection). */
+  pathTarget: Point | null;
 }
 
 export class AgentSpriteManager {
@@ -56,7 +62,7 @@ export class AgentSpriteManager {
     }
     sprite.play();
     this.container.addChild(sprite);
-    this.sprites.set(agent.id, { sprite, phase: 0 });
+    this.sprites.set(agent.id, { sprite, phase: 0, waypoints: [], pathTarget: null });
   }
 
   removeAgent(id: string): void {
@@ -77,14 +83,35 @@ export class AgentSpriteManager {
       const sprite = visual.sprite;
 
       if (agent.targetPosition) {
-        const dx = agent.targetPosition.x - sprite.x;
-        const dy = agent.targetPosition.y - sprite.y;
+        // Recompute path if the target changed
+        if (
+          !visual.pathTarget ||
+          visual.pathTarget.x !== agent.targetPosition.x ||
+          visual.pathTarget.y !== agent.targetPosition.y
+        ) {
+          visual.pathTarget = { x: agent.targetPosition.x, y: agent.targetPosition.y };
+          const path = findPath({ x: sprite.x, y: sprite.y }, agent.targetPosition);
+          visual.waypoints = path.length > 0 ? path : [{ x: agent.targetPosition.x, y: agent.targetPosition.y }];
+        }
+
+        if (visual.waypoints.length === 0) {
+          this.applyIdlePose(agent, visual, deltaSeconds);
+          continue;
+        }
+
+        const wp = visual.waypoints[0];
+        const dx = wp.x - sprite.x;
+        const dy = wp.y - sprite.y;
         const dist = Math.hypot(dx, dy);
 
-        if (dist < 0.5) {
-          sprite.x = agent.targetPosition.x;
-          sprite.y = agent.targetPosition.y;
-          this.applyIdlePose(agent, visual, deltaSeconds);
+        if (dist < 1) {
+          sprite.x = wp.x;
+          sprite.y = wp.y;
+          visual.waypoints.shift();
+
+          if (visual.waypoints.length === 0) {
+            this.applyIdlePose(agent, visual, deltaSeconds);
+          }
         } else {
           const speed = 35;
           const nx = dx / dist;
@@ -104,6 +131,10 @@ export class AgentSpriteManager {
   private applyIdlePose(agent: Agent, visual: AgentVisual, deltaSeconds: number): void {
     const sprite = visual.sprite;
     visual.phase += deltaSeconds * 8;
+
+    // Reset tint in case it was set by a previous error state
+    sprite.tint = 0xffffff;
+
     if (agent.state === 'thinking') {
       sprite.textures = [this.getFrame(agent.characterIndex, 'up_1')];
       sprite.stop();
@@ -125,6 +156,40 @@ export class AgentSpriteManager {
       return;
     }
 
+    if (agent.state === 'searching') {
+      sprite.textures = [this.getFrame(agent.characterIndex, 'left_1')];
+      sprite.stop();
+      sprite.x += Math.sin(visual.phase * 1.5) * 0.3;
+      return;
+    }
+
+    if (agent.state === 'cooling') {
+      sprite.textures = [this.getFrame(agent.characterIndex, 'down_1')];
+      sprite.stop();
+      sprite.y += Math.sin(visual.phase * 0.8) * 0.4;
+      return;
+    }
+
+    if (agent.state === 'delegating') {
+      sprite.textures = [this.getFrame(agent.characterIndex, 'right_1')];
+      sprite.stop();
+      return;
+    }
+
+    if (agent.state === 'error') {
+      sprite.textures = [this.getFrame(agent.characterIndex, 'down_1')];
+      sprite.stop();
+      sprite.tint = Math.sin(visual.phase * 3) > 0 ? 0xff4444 : 0xffffff;
+      return;
+    }
+
+    if (agent.state === 'waiting') {
+      sprite.textures = [this.getFrame(agent.characterIndex, 'down_1')];
+      sprite.stop();
+      return;
+    }
+
+    // Default idle
     sprite.textures = [this.getFrame(agent.characterIndex, 'down_1')];
     sprite.stop();
   }

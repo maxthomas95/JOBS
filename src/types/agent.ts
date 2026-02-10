@@ -4,6 +4,11 @@ export type AgentState =
   | 'reading'
   | 'thinking'
   | 'terminal'
+  | 'searching'
+  | 'cooling'
+  | 'delegating'
+  | 'error'
+  | 'waiting'
   | 'idle'
   | 'leaving';
 
@@ -29,6 +34,8 @@ export const STATIONS = {
   door: { x: 17, y: 13 },
   whiteboard: { x: 2, y: 2 },
   terminal: { x: 2, y: 12 },
+  library: { x: 16, y: 2 },
+  coffee: { x: 9, y: 12 },
   desks: [
     { x: 2, y: 6 },
     { x: 5, y: 6 },

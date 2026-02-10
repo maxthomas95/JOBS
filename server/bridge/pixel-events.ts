@@ -20,7 +20,7 @@ export function toProjectName(inputPath: string): string {
 export function createSessionEvent(
   sessionId: string,
   action: 'started' | 'ended',
-  opts?: { project?: string; source?: string; agentId?: string; timestamp?: number },
+  opts?: { project?: string; source?: string; agentId?: string; timestamp?: number; characterIndex?: number; deskIndex?: number | null },
 ): SessionEvent {
   return {
     id: uuid(),
@@ -31,6 +31,8 @@ export function createSessionEvent(
     project: opts?.project,
     source: opts?.source,
     agentId: opts?.agentId,
+    characterIndex: opts?.characterIndex,
+    deskIndex: opts?.deskIndex,
   };
 }
 

@@ -10,26 +10,35 @@ function normalizePath(path: string): string {
   return path.replace(/\\/g, '/');
 }
 
-function isSessionJsonl(filePath: string): boolean {
+interface SessionJsonlResult {
+  valid: boolean;
+  isSubAgent: boolean;
+}
+
+function isSessionJsonl(filePath: string): SessionJsonlResult {
   const normalized = normalizePath(filePath);
   if (!normalized.endsWith('.jsonl')) {
-    return false;
+    return { valid: false, isSubAgent: false };
   }
   if (normalized.endsWith('/history.jsonl')) {
-    return false;
-  }
-  if (normalized.includes('/subagents/')) {
-    return false;
+    return { valid: false, isSubAgent: false };
   }
   const marker = '/projects/';
   const markerIndex = normalized.indexOf(marker);
   if (markerIndex === -1) {
-    return false;
+    return { valid: false, isSubAgent: false };
   }
   const relative = normalized.slice(markerIndex + marker.length);
   const parts = relative.split('/').filter(Boolean);
-  // Match ~/.claude/projects/<project>/<session>.jsonl only.
-  return parts.length === 2;
+  // Match ~/.claude/projects/<project>/<session>.jsonl (main sessions)
+  if (parts.length === 2) {
+    return { valid: true, isSubAgent: false };
+  }
+  // Match ~/.claude/projects/<project>/subagents/<session>.jsonl (sub-agent sessions)
+  if (parts.length === 3 && parts[1] === 'subagents') {
+    return { valid: true, isSubAgent: true };
+  }
+  return { valid: false, isSubAgent: false };
 }
 
 export class SessionWatcher extends EventEmitter {
@@ -45,12 +54,8 @@ export class SessionWatcher extends EventEmitter {
     const watchRoot = join(this.claudeDir, 'projects');
     this.watcher = chokidar.watch(watchRoot, {
       ignored: (path, stats) => {
-        const normalized = normalizePath(path);
-        if (normalized.includes('/subagents/')) {
-          return true;
-        }
         if (stats?.isFile()) {
-          return !isSessionJsonl(path);
+          return !isSessionJsonl(path).valid;
         }
         return false;
       },
@@ -80,7 +85,8 @@ export class SessionWatcher extends EventEmitter {
   }
 
   private async processFile(filePath: string, isInitialAdd: boolean): Promise<void> {
-    if (!isSessionJsonl(filePath)) {
+    const check = isSessionJsonl(filePath);
+    if (!check.valid) {
       return;
     }
 
@@ -94,7 +100,7 @@ export class SessionWatcher extends EventEmitter {
       const agentId = sessionId;
       if (!this.announcedSessions.has(sessionId)) {
         this.announcedSessions.add(sessionId);
-        const sessionPayload: WatchSessionPayload = { sessionId, agentId, filePath };
+        const sessionPayload: WatchSessionPayload = { sessionId, agentId, filePath, isSubAgent: check.isSubAgent };
         this.emit('session', sessionPayload);
       }
 

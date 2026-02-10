@@ -6,13 +6,27 @@ interface ServerAgent extends Agent {
   filePath?: string;
 }
 
-function classifyTool(toolName: string): 'terminal' | 'research' | 'coding' {
+type ToolClassification = 'terminal' | 'searching' | 'reading' | 'coding' | 'delegating' | 'thinking';
+
+function classifyTool(toolName: string): ToolClassification {
   const tool = toolName.toLowerCase();
   if (tool.includes('bash') || tool.includes('terminal')) {
     return 'terminal';
   }
-  if (tool.includes('search') || tool.includes('websearch')) {
-    return 'research';
+  if (tool.includes('search') || tool.includes('websearch') || tool.includes('grep') || tool.includes('glob')) {
+    return 'searching';
+  }
+  if (tool.includes('read')) {
+    return 'reading';
+  }
+  if (tool.includes('task')) {
+    return 'delegating';
+  }
+  if (tool.includes('plan') || tool.includes('enterplanmode')) {
+    return 'thinking';
+  }
+  if (tool.includes('write') || tool.includes('edit')) {
+    return 'coding';
   }
   return 'coding';
 }
@@ -70,9 +84,13 @@ export class SessionManager {
     }
 
     agent.lastEventAt = event.timestamp || Date.now();
+    const desk = agent.deskIndex === null ? STATIONS.whiteboard : STATIONS.desks[agent.deskIndex];
 
     if (event.type === 'session') {
       if (event.action === 'started') {
+        // Enrich session event with agent metadata for client-side instant accuracy
+        event.characterIndex = agent.characterIndex;
+        event.deskIndex = agent.deskIndex;
         this.applyState(agent, 'entering', agent.deskIndex === null ? STATIONS.door : STATIONS.desks[agent.deskIndex]);
       } else if (event.action === 'ended') {
         this.applyState(agent, 'leaving', STATIONS.door);
@@ -84,8 +102,14 @@ export class SessionManager {
       return;
     }
 
-    if (event.type === 'activity' && event.action === 'thinking') {
-      this.applyState(agent, 'thinking', STATIONS.whiteboard);
+    if (event.type === 'activity') {
+      if (event.action === 'thinking') {
+        this.applyState(agent, 'thinking', STATIONS.whiteboard);
+      } else if (event.action === 'responding') {
+        this.applyState(agent, 'coding', desk);
+      } else if (event.action === 'waiting') {
+        this.applyState(agent, 'waiting', STATIONS.coffee);
+      }
       return;
     }
 
@@ -93,18 +117,28 @@ export class SessionManager {
       const mode = classifyTool(event.tool);
       if (mode === 'terminal') {
         this.applyState(agent, 'terminal', STATIONS.terminal);
-      } else if (mode === 'research') {
-        this.applyState(agent, 'reading', STATIONS.whiteboard);
+      } else if (mode === 'searching') {
+        this.applyState(agent, 'searching', STATIONS.library);
+      } else if (mode === 'reading') {
+        this.applyState(agent, 'reading', desk);
+      } else if (mode === 'delegating') {
+        this.applyState(agent, 'delegating', desk);
+      } else if (mode === 'thinking') {
+        this.applyState(agent, 'thinking', STATIONS.whiteboard);
       } else {
-        const desk = agent.deskIndex === null ? STATIONS.whiteboard : STATIONS.desks[agent.deskIndex];
         this.applyState(agent, 'coding', desk);
       }
       return;
     }
 
+    if (event.type === 'error') {
+      agent.state = 'error';
+      // Don't change targetPosition on error — stay at current location
+      return;
+    }
+
     if (event.type === 'summary') {
-      const desk = agent.deskIndex === null ? STATIONS.whiteboard : STATIONS.desks[agent.deskIndex];
-      this.applyState(agent, 'idle', desk);
+      this.applyState(agent, 'cooling', STATIONS.coffee);
     }
   }
 

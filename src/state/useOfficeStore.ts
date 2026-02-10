@@ -13,18 +13,30 @@ interface OfficeState {
   handleEvent: (event: PixelEvent) => void;
 }
 
-function classifyTool(toolName: string): 'terminal' | 'research' | 'coding' {
+function classifyTool(toolName: string): AgentState {
   const tool = toolName.toLowerCase();
   if (tool.includes('bash') || tool.includes('terminal')) {
     return 'terminal';
   }
-  if (tool.includes('search') || tool.includes('websearch')) {
-    return 'research';
+  if (tool.includes('search') || tool.includes('websearch') || tool.includes('grep') || tool.includes('glob')) {
+    return 'searching';
+  }
+  if (tool === 'task' || tool.includes('subagent')) {
+    return 'delegating';
+  }
+  if (tool.includes('plan') || tool.includes('enterplanmode')) {
+    return 'thinking';
+  }
+  if (tool.includes('read')) {
+    return 'reading';
+  }
+  if (tool.includes('write') || tool.includes('edit')) {
+    return 'coding';
   }
   return 'coding';
 }
 
-function targetFor(agent: Agent, state: AgentState, tool?: string): Point {
+function targetFor(agent: Agent, state: AgentState, _tool?: string): Point {
   if (state === 'thinking') {
     return tileToWorld(STATIONS.whiteboard);
   }
@@ -34,22 +46,21 @@ function targetFor(agent: Agent, state: AgentState, tool?: string): Point {
   if (state === 'terminal') {
     return tileToWorld(STATIONS.terminal);
   }
+  if (state === 'searching') {
+    return tileToWorld(STATIONS.library);
+  }
+  if (state === 'cooling' || state === 'waiting') {
+    return tileToWorld(STATIONS.coffee);
+  }
   if (state === 'leaving') {
     return tileToWorld(STATIONS.door);
   }
-  if (state === 'entering' || state === 'coding' || state === 'idle') {
+  if (state === 'error') {
+    return agent.position;
+  }
+  if (state === 'entering' || state === 'coding' || state === 'idle' || state === 'delegating') {
     if (agent.deskIndex !== null) {
       return tileToWorld(STATIONS.desks[agent.deskIndex]);
-    }
-  }
-
-  if (tool) {
-    const mode = classifyTool(tool);
-    if (mode === 'terminal') {
-      return tileToWorld(STATIONS.terminal);
-    }
-    if (mode === 'research') {
-      return tileToWorld(STATIONS.whiteboard);
     }
   }
 
@@ -107,11 +118,11 @@ export const useOfficeStore = create<OfficeState>()(
         const newAgent: Agent = {
           id: event.sessionId,
           sessionId: event.sessionId,
-          characterIndex: Math.floor(Math.random() * 8),
+          characterIndex: event.characterIndex ?? Math.floor(Math.random() * 8),
           state: 'entering',
           position: tileToWorld(STATIONS.door),
           targetPosition: tileToWorld(STATIONS.whiteboard),
-          deskIndex: null,
+          deskIndex: event.deskIndex ?? null,
           lastEventAt: event.timestamp,
         };
         state.addAgent(newAgent);
@@ -137,16 +148,28 @@ export const useOfficeStore = create<OfficeState>()(
             get().removeAgent(existing.id);
           }, 2000);
         }
-      } else if (event.type === 'activity' && event.action === 'thinking') {
-        patch.state = 'thinking';
-        patch.targetPosition = tileToWorld(STATIONS.whiteboard);
+      } else if (event.type === 'activity') {
+        if (event.action === 'thinking') {
+          patch.state = 'thinking';
+          patch.targetPosition = tileToWorld(STATIONS.whiteboard);
+        } else if (event.action === 'responding') {
+          patch.state = 'coding';
+          patch.targetPosition = targetFor(existing, 'coding');
+        } else if (event.action === 'waiting') {
+          patch.state = 'waiting';
+          patch.targetPosition = tileToWorld(STATIONS.coffee);
+        }
       } else if (event.type === 'tool' && event.status === 'started') {
-        const mode = classifyTool(event.tool);
-        patch.state = mode === 'terminal' ? 'terminal' : mode === 'research' ? 'reading' : 'coding';
-        patch.targetPosition = targetFor(existing, patch.state, event.tool);
+        const toolState = classifyTool(event.tool);
+        patch.state = toolState;
+        patch.targetPosition = targetFor(existing, toolState, event.tool);
       } else if (event.type === 'summary') {
-        patch.state = 'idle';
-        patch.targetPosition = targetFor(existing, 'idle');
+        patch.state = 'cooling';
+        patch.targetPosition = tileToWorld(STATIONS.coffee);
+      } else if (event.type === 'agent' && event.action === 'error') {
+        patch.state = 'error';
+      } else if (event.type === 'error') {
+        patch.state = 'error';
       }
 
       state.updateAgent(existing.id, patch);
