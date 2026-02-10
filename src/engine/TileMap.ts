@@ -21,7 +21,7 @@ export function renderTileMap(container: Container): void {
     g.rect(x + 3, y + 3, TILE_SIZE - 6, TILE_SIZE - 6).fill(0x89a8c7);
   }
 
-  g.rect(STATIONS.whiteboard.x * TILE_SIZE, STATIONS.whiteboard.y * TILE_SIZE, TILE_SIZE * 3, TILE_SIZE).fill(0xf1f4f8);
+  g.rect(STATIONS.whiteboard.x * TILE_SIZE, STATIONS.whiteboard.y * TILE_SIZE, TILE_SIZE * 3, TILE_SIZE).fill(0x8ea4b8);
 
   g.rect(STATIONS.terminal.x * TILE_SIZE, STATIONS.terminal.y * TILE_SIZE, TILE_SIZE * 2, TILE_SIZE).fill(0x111722);
   g.rect(STATIONS.terminal.x * TILE_SIZE + 1, STATIONS.terminal.y * TILE_SIZE + 1, TILE_SIZE * 2 - 2, TILE_SIZE - 2).stroke({ color: 0x2ee65e, width: 1 });

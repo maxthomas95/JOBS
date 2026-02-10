@@ -1,4 +1,4 @@
-import { AnimatedSprite, Container, Spritesheet, Texture, SCALE_MODES } from 'pixi.js';
+import { AnimatedSprite, Container, Graphics, Spritesheet, Texture, SCALE_MODES } from 'pixi.js';
 import type { Agent } from '../types/agent.js';
 import type { Point } from '../types/agent.js';
 import { characterData } from '../assets/sprites/characters.js';
@@ -10,6 +10,7 @@ type Direction = 'up' | 'down' | 'left' | 'right';
 
 interface AgentVisual {
   sprite: AnimatedSprite;
+  shadow: Graphics;
   phase: number;
   /** Remaining waypoints the agent is walking toward. */
   waypoints: Point[];
@@ -48,6 +49,13 @@ export class AgentSpriteManager {
       return;
     }
 
+    // Shadow ellipse for contrast against any background
+    const shadow = new Graphics();
+    shadow.ellipse(0, 0, 8, 3).fill({ color: 0x000000, alpha: 0.35 });
+    shadow.x = agent.position.x;
+    shadow.y = agent.position.y + 4;
+    this.container.addChild(shadow);
+
     const textures = this.useFallbackSprites
       ? [Texture.WHITE]
       : this.getWalkTextures(agent.characterIndex, 'down');
@@ -63,7 +71,7 @@ export class AgentSpriteManager {
     }
     sprite.play();
     this.container.addChild(sprite);
-    this.sprites.set(agent.id, { sprite, phase: 0, waypoints: [], pathTarget: null });
+    this.sprites.set(agent.id, { sprite, shadow, phase: 0, waypoints: [], pathTarget: null });
   }
 
   removeAgent(id: string): void {
@@ -71,6 +79,7 @@ export class AgentSpriteManager {
     if (!visual) {
       return;
     }
+    visual.shadow.destroy();
     visual.sprite.destroy();
     this.sprites.delete(id);
   }
@@ -129,12 +138,17 @@ export class AgentSpriteManager {
         }
       }
 
-      // Focus highlight: scale pulse when selected in roster
+      // Keep shadow tracking the sprite
+      visual.shadow.x = sprite.x;
+      visual.shadow.y = sprite.y + 4;
+
+      // Base scale + focus highlight pulse
+      const BASE_SCALE = 1.4;
       if (id === focusedId) {
-        const pulse = 1 + Math.sin(visual.phase * 4) * 0.15;
+        const pulse = BASE_SCALE + Math.sin(visual.phase * 4) * 0.2;
         sprite.scale.set(pulse, pulse);
       } else {
-        sprite.scale.set(1, 1);
+        sprite.scale.set(BASE_SCALE, BASE_SCALE);
       }
     }
   }
