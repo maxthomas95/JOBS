@@ -1,16 +1,18 @@
 import { create } from 'zustand';
-import { subscribeWithSelector } from 'zustand/middleware';
+import { devtools, subscribeWithSelector } from 'zustand/middleware';
 import type { Agent, AgentState, Point } from '../types/agent.js';
 import { STATIONS, tileToWorld } from '../types/agent.js';
 import type { PixelEvent } from '../types/events.js';
 
 interface OfficeState {
   agents: Map<string, Agent>;
+  focusedAgentId: string | null;
   addAgent: (agent: Agent) => void;
   updateAgent: (id: string, patch: Partial<Agent>) => void;
   removeAgent: (id: string) => void;
   handleSnapshot: (agents: Agent[]) => void;
   handleEvent: (event: PixelEvent) => void;
+  focusAgent: (id: string | null) => void;
 }
 
 function classifyTool(toolName: string): AgentState {
@@ -67,9 +69,13 @@ function targetFor(agent: Agent, state: AgentState, _tool?: string): Point {
   return tileToWorld(STATIONS.whiteboard);
 }
 
+let focusTimer: ReturnType<typeof setTimeout> | null = null;
+
 export const useOfficeStore = create<OfficeState>()(
-  subscribeWithSelector((set, get) => ({
+  devtools(
+    subscribeWithSelector((set, get) => ({
     agents: new Map<string, Agent>(),
+    focusedAgentId: null,
 
     addAgent: (agent) => {
       set((state) => {
@@ -174,5 +180,18 @@ export const useOfficeStore = create<OfficeState>()(
 
       state.updateAgent(existing.id, patch);
     },
+
+    focusAgent: (id) => {
+      if (focusTimer) clearTimeout(focusTimer);
+      set({ focusedAgentId: id });
+      if (id) {
+        focusTimer = setTimeout(() => {
+          set({ focusedAgentId: null });
+          focusTimer = null;
+        }, 2000);
+      }
+    },
   })),
+    { name: 'office' },
+  ),
 );

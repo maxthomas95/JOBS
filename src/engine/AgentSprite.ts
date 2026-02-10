@@ -3,6 +3,7 @@ import type { Agent } from '../types/agent.js';
 import type { Point } from '../types/agent.js';
 import { characterData } from '../assets/sprites/characters.js';
 import { findPath } from './Pathfinder.js';
+import { useOfficeStore } from '../state/useOfficeStore.js';
 import atlasUrl from '../assets/sprites/32x32folk.png';
 
 type Direction = 'up' | 'down' | 'left' | 'right';
@@ -75,6 +76,8 @@ export class AgentSpriteManager {
   }
 
   update(deltaSeconds: number, agents: Map<string, Agent>): void {
+    const focusedId = useOfficeStore.getState().focusedAgentId;
+
     for (const [id, agent] of agents.entries()) {
       const visual = this.sprites.get(id);
       if (!visual) {
@@ -124,6 +127,14 @@ export class AgentSpriteManager {
             sprite.play();
           }
         }
+      }
+
+      // Focus highlight: scale pulse when selected in roster
+      if (id === focusedId) {
+        const pulse = 1 + Math.sin(visual.phase * 4) * 0.15;
+        sprite.scale.set(pulse, pulse);
+      } else {
+        sprite.scale.set(1, 1);
       }
     }
   }

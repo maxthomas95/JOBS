@@ -53,6 +53,7 @@ function formatFeedItem(event: PixelEvent): string {
 
 export function HUD() {
   const agents = useOfficeStore((state) => state.agents);
+  const focusAgent = useOfficeStore((state) => state.focusAgent);
   const events = useEventStore((state) => state.events);
   const count = agents.size;
   const agentRows = Array.from(agents.values()).slice(0, 10);
@@ -76,7 +77,7 @@ export function HUD() {
       {agentRows.length > 0 ? (
         <div className="agent-list">
           {agentRows.map((agent) => (
-            <div key={agent.id} className="agent-row">
+            <div key={agent.id} className="agent-row" onClick={() => focusAgent(agent.id)}>
               <span
                 className="agent-dot"
                 style={{ background: CHARACTER_COLORS[agent.characterIndex % 8] }}
