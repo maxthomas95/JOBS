@@ -28,6 +28,9 @@ const server = http.createServer(app);
 const sessionManager = new SessionManager();
 const wsServer = new WSServer(server, sessionManager);
 
+// Wire up snapshot callback so waiting-for-human detector can broadcast changes
+sessionManager.setSnapshotCallback(() => wsServer.broadcastSnapshot());
+
 if (useMock) {
   const mock = new MockEventGenerator();
   mock.start((event) => {

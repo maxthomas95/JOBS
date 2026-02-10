@@ -1,4 +1,4 @@
-import { AnimatedSprite, Container, Graphics, Spritesheet, Texture, SCALE_MODES } from 'pixi.js';
+import { AnimatedSprite, Container, Graphics, Spritesheet, Text, TextStyle, Texture, SCALE_MODES } from 'pixi.js';
 import type { Agent } from '../types/agent.js';
 import type { Point } from '../types/agent.js';
 import { characterData } from '../assets/sprites/characters.js';
@@ -16,6 +16,14 @@ interface AgentVisual {
   waypoints: Point[];
   /** The targetPosition that generated the current waypoints (for change detection). */
   pathTarget: Point | null;
+  /** Speech/thought bubble container above the sprite */
+  bubble: Container | null;
+  /** Current alpha of the bubble for fade transitions */
+  bubbleAlpha: number;
+  /** The activityText last shown in the bubble (for change detection) */
+  bubbleText: string | null;
+  /** Time-in-state label beneath the sprite */
+  timeLabel: Text | null;
 }
 
 export class AgentSpriteManager {
@@ -71,7 +79,10 @@ export class AgentSpriteManager {
     }
     sprite.play();
     this.container.addChild(sprite);
-    this.sprites.set(agent.id, { sprite, shadow, phase: 0, waypoints: [], pathTarget: null });
+    this.sprites.set(agent.id, {
+      sprite, shadow, phase: 0, waypoints: [], pathTarget: null,
+      bubble: null, bubbleAlpha: 0, bubbleText: null, timeLabel: null,
+    });
   }
 
   removeAgent(id: string): void {
@@ -81,6 +92,8 @@ export class AgentSpriteManager {
     }
     visual.shadow.destroy();
     visual.sprite.destroy();
+    if (visual.bubble) visual.bubble.destroy();
+    if (visual.timeLabel) visual.timeLabel.destroy();
     this.sprites.delete(id);
   }
 
@@ -108,32 +121,31 @@ export class AgentSpriteManager {
 
         if (visual.waypoints.length === 0) {
           this.applyIdlePose(agent, visual, deltaSeconds);
-          continue;
-        }
-
-        const wp = visual.waypoints[0];
-        const dx = wp.x - sprite.x;
-        const dy = wp.y - sprite.y;
-        const dist = Math.hypot(dx, dy);
-
-        if (dist < 1) {
-          sprite.x = wp.x;
-          sprite.y = wp.y;
-          visual.waypoints.shift();
-
-          if (visual.waypoints.length === 0) {
-            this.applyIdlePose(agent, visual, deltaSeconds);
-          }
         } else {
-          const speed = 35;
-          const nx = dx / dist;
-          const ny = dy / dist;
-          sprite.x += nx * speed * deltaSeconds;
-          sprite.y += ny * speed * deltaSeconds;
-          const dir: Direction = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : dy > 0 ? 'down' : 'up';
-          sprite.textures = this.getWalkTextures(agent.characterIndex, dir);
-          if (!sprite.playing) {
-            sprite.play();
+          const wp = visual.waypoints[0];
+          const dx = wp.x - sprite.x;
+          const dy = wp.y - sprite.y;
+          const dist = Math.hypot(dx, dy);
+
+          if (dist < 1) {
+            sprite.x = wp.x;
+            sprite.y = wp.y;
+            visual.waypoints.shift();
+
+            if (visual.waypoints.length === 0) {
+              this.applyIdlePose(agent, visual, deltaSeconds);
+            }
+          } else {
+            const speed = 35;
+            const nx = dx / dist;
+            const ny = dy / dist;
+            sprite.x += nx * speed * deltaSeconds;
+            sprite.y += ny * speed * deltaSeconds;
+            const dir: Direction = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : dy > 0 ? 'down' : 'up';
+            sprite.textures = this.getWalkTextures(agent.characterIndex, dir);
+            if (!sprite.playing) {
+              sprite.play();
+            }
           }
         }
       }
@@ -142,15 +154,160 @@ export class AgentSpriteManager {
       visual.shadow.x = sprite.x;
       visual.shadow.y = sprite.y + 4;
 
-      // Base scale + focus highlight pulse
+      // Base scale + focus highlight pulse + waitingForHuman treatment
       const BASE_SCALE = 1.4;
+      if (agent.waitingForHuman) {
+        // Pulsing yellow tint for waiting-for-human
+        const tintPulse = Math.sin(visual.phase * 3);
+        sprite.tint = tintPulse > 0 ? 0xffeb3b : 0xffffff;
+        // More noticeable bob
+        sprite.y += Math.sin(visual.phase * 1.5) * 1.5;
+      }
       if (id === focusedId) {
         const pulse = BASE_SCALE + Math.sin(visual.phase * 4) * 0.2;
         sprite.scale.set(pulse, pulse);
       } else {
         sprite.scale.set(BASE_SCALE, BASE_SCALE);
       }
+
+      // Update speech bubble and time label
+      this.updateBubble(agent, visual, deltaSeconds);
+      this.updateTimeLabel(agent, visual);
     }
+  }
+
+  private getBubbleColor(agent: Agent): { bg: number; text: number } {
+    if (agent.waitingForHuman) return { bg: 0xffeb3b, text: 0x000000 };
+    switch (agent.state) {
+      case 'thinking': return { bg: 0x7c4dff, text: 0xffffff };
+      case 'terminal': return { bg: 0x2ee65e, text: 0xffffff };
+      case 'searching': return { bg: 0xffa726, text: 0xffffff };
+      case 'coding':
+      case 'reading': return { bg: 0x42a5f5, text: 0xffffff };
+      case 'error': return { bg: 0xff4444, text: 0xffffff };
+      case 'waiting': return { bg: 0xffeb3b, text: 0x000000 };
+      default: return { bg: 0x555555, text: 0xffffff };
+    }
+  }
+
+  private createBubble(displayText: string, colors: { bg: number; text: number }): Container {
+    const bubble = new Container();
+
+    const style = new TextStyle({
+      fontSize: 7,
+      fontFamily: 'monospace',
+      fill: colors.text,
+    });
+    const label = new Text({ text: displayText, style });
+    label.anchor.set(0.5, 0.5);
+
+    const padX = 4;
+    const padY = 2;
+    const w = label.width + padX * 2;
+    const h = label.height + padY * 2;
+
+    const bg = new Graphics();
+    // Rounded rectangle background
+    bg.roundRect(-w / 2, -h / 2, w, h, 3).fill(colors.bg);
+    // Small triangle pointing down
+    bg.moveTo(-3, h / 2).lineTo(0, h / 2 + 3).lineTo(3, h / 2).fill(colors.bg);
+
+    bubble.addChild(bg);
+    bubble.addChild(label);
+
+    return bubble;
+  }
+
+  private updateBubble(agent: Agent, visual: AgentVisual, deltaSeconds: number): void {
+    // Determine what text to show
+    let displayText: string | null = null;
+    if (agent.waitingForHuman) {
+      displayText = '? Waiting for you';
+    } else if (agent.activityText) {
+      displayText = agent.activityText.length > 15
+        ? agent.activityText.slice(0, 14) + '\u2026'
+        : agent.activityText;
+    }
+
+    const shouldShow = displayText !== null;
+    const fadeSpeed = 6; // alpha units per second
+
+    if (shouldShow) {
+      // Create or recreate bubble if text changed
+      if (visual.bubbleText !== displayText) {
+        if (visual.bubble) {
+          visual.bubble.destroy();
+          visual.bubble = null;
+        }
+        const colors = this.getBubbleColor(agent);
+        visual.bubble = this.createBubble(displayText!, colors);
+        visual.bubble.alpha = visual.bubbleAlpha;
+        this.container.addChild(visual.bubble);
+        visual.bubbleText = displayText;
+      }
+      // Fade in
+      visual.bubbleAlpha = Math.min(1, visual.bubbleAlpha + fadeSpeed * deltaSeconds);
+    } else {
+      // Fade out
+      visual.bubbleAlpha = Math.max(0, visual.bubbleAlpha - fadeSpeed * deltaSeconds);
+      if (visual.bubbleAlpha <= 0 && visual.bubble) {
+        visual.bubble.destroy();
+        visual.bubble = null;
+        visual.bubbleText = null;
+      }
+    }
+
+    // Position and apply alpha
+    if (visual.bubble) {
+      visual.bubble.x = visual.sprite.x;
+      visual.bubble.y = visual.sprite.y - 22;
+      visual.bubble.alpha = visual.bubbleAlpha;
+    }
+  }
+
+  private updateTimeLabel(agent: Agent, visual: AgentVisual): void {
+    const elapsed = (Date.now() - agent.stateChangedAt) / 1000;
+
+    if (elapsed < 10) {
+      // Hide if under 10s
+      if (visual.timeLabel) {
+        visual.timeLabel.destroy();
+        visual.timeLabel = null;
+      }
+      return;
+    }
+
+    // Format time string
+    const timeStr = elapsed < 60
+      ? `${Math.floor(elapsed)}s`
+      : `${Math.floor(elapsed / 60)}m`;
+
+    // Color based on duration
+    let color: number;
+    if (elapsed > 300) {
+      color = 0xff4444; // red
+    } else if (elapsed > 60) {
+      color = 0xffeb3b; // yellow
+    } else {
+      color = 0xffffff; // white
+    }
+
+    if (!visual.timeLabel) {
+      const style = new TextStyle({
+        fontSize: 5,
+        fontFamily: 'monospace',
+        fill: color,
+      });
+      visual.timeLabel = new Text({ text: timeStr, style });
+      visual.timeLabel.anchor.set(0.5, 0);
+      this.container.addChild(visual.timeLabel);
+    } else {
+      visual.timeLabel.text = timeStr;
+      visual.timeLabel.style.fill = color;
+    }
+
+    visual.timeLabel.x = visual.sprite.x;
+    visual.timeLabel.y = visual.sprite.y + 6;
   }
 
   private applyIdlePose(agent: Agent, visual: AgentVisual, deltaSeconds: number): void {

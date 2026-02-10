@@ -37,6 +37,12 @@
   align-items: center;
 }
 
+.hud-header-right {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
 .hud-header h1 {
   margin: 0;
   font-size: 0.95rem;
@@ -165,6 +171,51 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.agent-activity {
+  font-family: monospace;
+  font-size: 0.55rem;
+  opacity: 0.5;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100px;
+}
+
+.agent-project {
+  font-size: 0.5rem;
+  font-style: italic;
+  opacity: 0.4;
+}
+
+.waiting-badge {
+  background: #ffeb3b;
+  color: #000;
+  font-size: 0.55rem;
+  font-weight: 600;
+  padding: 0.05rem 0.3rem;
+  border-radius: 999px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.notification-toggle {
+  pointer-events: auto;
+  font-family: inherit;
+  font-size: 0.6rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  background: rgba(10, 12, 18, 0.7);
+  border: 1px solid #4a5167;
+  border-radius: 999px;
+  padding: 0.35rem 0.55rem;
+  color: inherit;
+  cursor: pointer;
+}
+
+.notification-toggle:hover {
+  background: rgba(30, 35, 50, 0.8);
 }
 
 @media (max-width: 640px) {

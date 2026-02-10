@@ -7,12 +7,14 @@ import type { PixelEvent } from '../types/events.js';
 interface OfficeState {
   agents: Map<string, Agent>;
   focusedAgentId: string | null;
+  notificationsEnabled: boolean;
   addAgent: (agent: Agent) => void;
   updateAgent: (id: string, patch: Partial<Agent>) => void;
   removeAgent: (id: string) => void;
   handleSnapshot: (agents: Agent[]) => void;
   handleEvent: (event: PixelEvent) => void;
   focusAgent: (id: string | null) => void;
+  toggleNotifications: () => void;
 }
 
 function classifyTool(toolName: string): AgentState {
@@ -70,12 +72,24 @@ function targetFor(agent: Agent, state: AgentState, _tool?: string): Point {
 }
 
 let focusTimer: ReturnType<typeof setTimeout> | null = null;
+let notificationPermissionRequested = false;
+
+function sendBrowserNotification(body: string) {
+  if (typeof Notification === 'undefined') return;
+  if (Notification.permission === 'granted') {
+    new Notification('J.O.B.S.', { body, icon: '/favicon.ico' });
+  } else if (Notification.permission !== 'denied' && !notificationPermissionRequested) {
+    notificationPermissionRequested = true;
+    Notification.requestPermission();
+  }
+}
 
 export const useOfficeStore = create<OfficeState>()(
   devtools(
     subscribeWithSelector((set, get) => ({
     agents: new Map<string, Agent>(),
     focusedAgentId: null,
+    notificationsEnabled: false,
 
     addAgent: (agent) => {
       set((state) => {
@@ -130,6 +144,10 @@ export const useOfficeStore = create<OfficeState>()(
           targetPosition: tileToWorld(STATIONS.whiteboard),
           deskIndex: event.deskIndex ?? null,
           lastEventAt: event.timestamp,
+          stateChangedAt: event.timestamp,
+          activityText: null,
+          project: event.project ?? null,
+          waitingForHuman: false,
         };
         state.addAgent(newAgent);
         return;
@@ -141,6 +159,7 @@ export const useOfficeStore = create<OfficeState>()(
 
       const patch: Partial<Agent> = {
         lastEventAt: event.timestamp,
+        waitingForHuman: false,
       };
 
       if (event.type === 'session') {
@@ -158,24 +177,40 @@ export const useOfficeStore = create<OfficeState>()(
         if (event.action === 'thinking') {
           patch.state = 'thinking';
           patch.targetPosition = tileToWorld(STATIONS.whiteboard);
+          patch.activityText = 'Thinking...';
         } else if (event.action === 'responding') {
           patch.state = 'coding';
           patch.targetPosition = targetFor(existing, 'coding');
+          patch.activityText = 'Writing code...';
         } else if (event.action === 'waiting') {
           patch.state = 'waiting';
           patch.targetPosition = tileToWorld(STATIONS.coffee);
+          patch.activityText = 'Waiting...';
+        } else if (event.action === 'user_prompt') {
+          patch.activityText = null;
+          patch.waitingForHuman = true;
+          if (!existing.waitingForHuman && state.notificationsEnabled) {
+            const shortId = existing.id.slice(0, 8);
+            sendBrowserNotification(`Agent ${shortId} is waiting for your input`);
+          }
         }
       } else if (event.type === 'tool' && event.status === 'started') {
         const toolState = classifyTool(event.tool);
         patch.state = toolState;
         patch.targetPosition = targetFor(existing, toolState, event.tool);
+        patch.activityText = event.context ?? event.tool;
       } else if (event.type === 'summary') {
         patch.state = 'cooling';
         patch.targetPosition = tileToWorld(STATIONS.coffee);
+        patch.activityText = 'Taking a break';
       } else if (event.type === 'agent' && event.action === 'error') {
         patch.state = 'error';
       } else if (event.type === 'error') {
         patch.state = 'error';
+      }
+
+      if (patch.state && patch.state !== existing.state) {
+        patch.stateChangedAt = Date.now();
       }
 
       state.updateAgent(existing.id, patch);
@@ -190,6 +225,14 @@ export const useOfficeStore = create<OfficeState>()(
           focusTimer = null;
         }, 2000);
       }
+    },
+
+    toggleNotifications: () => {
+      const next = !get().notificationsEnabled;
+      if (next && typeof Notification !== 'undefined' && Notification.permission !== 'granted') {
+        Notification.requestPermission();
+      }
+      set({ notificationsEnabled: next });
     },
   })),
     { name: 'office' },

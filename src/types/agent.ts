@@ -26,6 +26,14 @@ export interface Agent {
   targetPosition: Point | null;
   deskIndex: number | null;
   lastEventAt: number;
+  /** Timestamp when the current state was entered */
+  stateChangedAt: number;
+  /** Short text describing current activity (e.g. "auth.ts", "running tests") */
+  activityText: string | null;
+  /** Project/repo basename this agent is working on */
+  project: string | null;
+  /** Whether the agent is waiting for human input */
+  waitingForHuman: boolean;
 }
 
 export const TILE_SIZE = 16;

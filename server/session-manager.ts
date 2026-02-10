@@ -4,6 +4,7 @@ import { STATIONS, tileToWorld } from '../src/types/agent.js';
 
 interface ServerAgent extends Agent {
   filePath?: string;
+  lastEventType?: string;
 }
 
 type ToolClassification = 'terminal' | 'searching' | 'reading' | 'coding' | 'delegating' | 'thinking';
@@ -37,11 +38,18 @@ export class SessionManager {
   private nextCharacterIndex = 0;
   private readonly staleIdleMs: number;
   private readonly staleEvictMs: number;
+  private readonly waitingThresholdMs = 15000;
+  private onSnapshotNeeded: (() => void) | null = null;
 
   constructor(staleIdleMs = Number(process.env.STALE_IDLE_MS ?? 300000), staleEvictMs = Number(process.env.STALE_EVICT_MS ?? 900000)) {
     this.staleIdleMs = staleIdleMs;
     this.staleEvictMs = staleEvictMs;
     this.startGhostTimer();
+    this.startWaitingDetector();
+  }
+
+  setSnapshotCallback(cb: () => void): void {
+    this.onSnapshotNeeded = cb;
   }
 
   registerSession(sessionId: string, filePath: string): ServerAgent {
@@ -65,6 +73,10 @@ export class SessionManager {
       targetPosition: target,
       deskIndex,
       lastEventAt: Date.now(),
+      stateChangedAt: Date.now(),
+      activityText: null,
+      project: filePath.split(/[\\/]/).pop() ?? null,
+      waitingForHuman: false,
       filePath,
     };
 
@@ -84,16 +96,21 @@ export class SessionManager {
     }
 
     agent.lastEventAt = event.timestamp || Date.now();
+    // Clear waiting-for-human on any new event
+    if (agent.waitingForHuman) {
+      agent.waitingForHuman = false;
+    }
     const desk = agent.deskIndex === null ? STATIONS.whiteboard : STATIONS.desks[agent.deskIndex];
 
     if (event.type === 'session') {
+      agent.lastEventType = `session.${event.action}`;
       if (event.action === 'started') {
         // Enrich session event with agent metadata for client-side instant accuracy
         event.characterIndex = agent.characterIndex;
         event.deskIndex = agent.deskIndex;
-        this.applyState(agent, 'entering', agent.deskIndex === null ? STATIONS.door : STATIONS.desks[agent.deskIndex]);
+        this.applyState(agent, 'entering', agent.deskIndex === null ? STATIONS.door : STATIONS.desks[agent.deskIndex], null);
       } else if (event.action === 'ended') {
-        this.applyState(agent, 'leaving', STATIONS.door);
+        this.applyState(agent, 'leaving', STATIONS.door, null);
         this.releaseDesk(sessionId);
         setTimeout(() => {
           this.agents.delete(sessionId);
@@ -103,42 +120,51 @@ export class SessionManager {
     }
 
     if (event.type === 'activity') {
+      agent.lastEventType = `activity.${event.action}`;
       if (event.action === 'thinking') {
-        this.applyState(agent, 'thinking', STATIONS.whiteboard);
+        this.applyState(agent, 'thinking', STATIONS.whiteboard, 'Thinking...');
       } else if (event.action === 'responding') {
-        this.applyState(agent, 'coding', desk);
+        this.applyState(agent, 'coding', desk, 'Writing code...');
       } else if (event.action === 'waiting') {
-        this.applyState(agent, 'waiting', STATIONS.coffee);
+        this.applyState(agent, 'waiting', STATIONS.coffee, 'Waiting...');
+      } else if (event.action === 'user_prompt') {
+        // user_prompt: don't change state/location, just clear activityText
+        agent.activityText = null;
       }
       return;
     }
 
     if (event.type === 'tool' && event.status === 'started') {
+      agent.lastEventType = `tool.${event.tool}`;
+      const context = event.context ?? null;
       const mode = classifyTool(event.tool);
       if (mode === 'terminal') {
-        this.applyState(agent, 'terminal', STATIONS.terminal);
+        this.applyState(agent, 'terminal', STATIONS.terminal, context);
       } else if (mode === 'searching') {
-        this.applyState(agent, 'searching', STATIONS.library);
+        this.applyState(agent, 'searching', STATIONS.library, context);
       } else if (mode === 'reading') {
-        this.applyState(agent, 'reading', desk);
+        this.applyState(agent, 'reading', desk, context);
       } else if (mode === 'delegating') {
-        this.applyState(agent, 'delegating', desk);
+        this.applyState(agent, 'delegating', desk, context);
       } else if (mode === 'thinking') {
-        this.applyState(agent, 'thinking', STATIONS.whiteboard);
+        this.applyState(agent, 'thinking', STATIONS.whiteboard, context);
       } else {
-        this.applyState(agent, 'coding', desk);
+        this.applyState(agent, 'coding', desk, context);
       }
       return;
     }
 
     if (event.type === 'error') {
+      agent.lastEventType = 'error';
       agent.state = 'error';
+      agent.stateChangedAt = Date.now();
       // Don't change targetPosition on error — stay at current location
       return;
     }
 
     if (event.type === 'summary') {
-      this.applyState(agent, 'cooling', STATIONS.coffee);
+      agent.lastEventType = 'summary';
+      this.applyState(agent, 'cooling', STATIONS.coffee, 'Taking a break');
     }
   }
 
@@ -155,9 +181,11 @@ export class SessionManager {
     }));
   }
 
-  private applyState(agent: ServerAgent, state: AgentState, target: { x: number; y: number }): void {
+  private applyState(agent: ServerAgent, state: AgentState, target: { x: number; y: number }, activityText: string | null): void {
     agent.state = state;
     agent.targetPosition = tileToWorld(target);
+    agent.stateChangedAt = Date.now();
+    agent.activityText = activityText;
   }
 
   private reserveDesk(sessionId: string): number | null {
@@ -192,5 +220,23 @@ export class SessionManager {
         }
       }
     }, 30000).unref();
+  }
+
+  private startWaitingDetector(): void {
+    setInterval(() => {
+      const now = Date.now();
+      let changed = false;
+      for (const agent of this.agents.values()) {
+        const isWaitingEvent = agent.lastEventType === 'activity.user_prompt' || agent.lastEventType === 'activity.waiting';
+        const elapsed = now - agent.lastEventAt;
+        if (isWaitingEvent && elapsed > this.waitingThresholdMs && !agent.waitingForHuman) {
+          agent.waitingForHuman = true;
+          changed = true;
+        }
+      }
+      if (changed && this.onSnapshotNeeded) {
+        this.onSnapshotNeeded();
+      }
+    }, 5000).unref();
   }
 }
