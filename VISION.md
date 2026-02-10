@@ -360,7 +360,7 @@ open http://your-proxmox-host:8780
 - [x] Basic Zustand devtools integration
 - **Deliverable:** Full situational awareness of all agent activity
 
-### M4: Audio & Ambient (1 session)
+### M4: Audio & Ambient (deferred to v2)
 > Make it feel alive.
 
 - [ ] Keyboard clacking (proximity to active desk)
@@ -376,8 +376,8 @@ open http://your-proxmox-host:8780
 
 - [x] Dockerfile (multi-stage: build frontend + run server)
 - [x] docker-compose.yml with volume mount
-- [ ] README with setup instructions
-- [ ] Proper error handling (bridge disconnects, no sessions, etc.)
+- [x] README with setup instructions
+- [x] Proper error handling (bridge disconnects, no sessions, etc.)
 - [x] Reconnection logic for WebSocket
 - [x] Loading state / "No active sessions" idle office scene
 - **Deliverable:** `docker compose up -d` and done
