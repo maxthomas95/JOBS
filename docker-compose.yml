@@ -1,0 +1,17 @@
+services:
+  jobs:
+    build: .
+    container_name: jarvis-jobs
+    ports:
+      - "8780:8780"
+    volumes:
+      - ${HOME}/.claude:/data/claude:ro
+    environment:
+      - CLAUDE_DIR=/data/claude
+      - PORT=8780
+      - WS_PATH=/ws
+      - MOCK_EVENTS=false
+    restart: unless-stopped
+    sysctls:
+      - fs.inotify.max_user_watches=524288
+      - fs.inotify.max_user_instances=256

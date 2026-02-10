@@ -123,6 +123,12 @@
   font-size: 0.62rem;
 }
 
+.agent-uptime {
+  opacity: 0.4;
+  font-size: 0.58rem;
+  margin-left: auto;
+}
+
 .empty-state {
   align-self: center;
   margin-bottom: 2rem;
