@@ -148,12 +148,12 @@ PixiJS renders character movement + animation
 
 | Component | Technology | Version | Why |
 |---|---|---|---|
-| **Rendering** | PixiJS + @pixi/react | v8 | Lightweight 2D WebGL, great sprite support |
-| **UI** | React 18 + TypeScript | 18.x | Good PixiJS integration, you know it |
+| **Rendering** | PixiJS (imperative API) | v8 | Lightweight 2D WebGL, great sprite support |
+| **UI** | React 19 + TypeScript | 19.x | HUD overlay, Zustand integration |
 | **State** | Zustand | 5.x | Minimal boilerplate, perfect for real-time |
 | **WebSocket** | Native WebSocket (client) / ws (server) | - | No socket.io overhead |
 | **Bridge Core** | Extracted from pixelhq-bridge (MIT) | - | Battle-tested privacy stripping |
-| **File Watching** | chokidar | 4.x | Same as pixelhq-bridge uses |
+| **File Watching** | chokidar | 5.x | Directory watch with ignored filter |
 | **Build** | Vite | 6.x | Fast, TypeScript-native |
 | **Pathfinding** | pathfinding (npm) | 0.4.x | A* grid pathfinding |
 | **Audio** | Howler.js | 2.2.x | Simple, reliable web audio |
@@ -342,22 +342,22 @@ open http://your-proxmox-host:8780
 ### M2: Multi-Agent Office (1-2 sessions)
 > Multiple characters, desk assignment, full event mapping.
 
-- [ ] Session Manager: detect multiple active sessions
-- [ ] Unique character assignment per agent (color palette swap)
-- [ ] Desk assignment system (FIFO)
-- [ ] All event types mapped to office behaviors (full table above)
-- [ ] Sub-agent spawning (new character enters when agent spawns)
-- [ ] Agent departure animation when session ends
+- [x] Session Manager: detect multiple active sessions
+- [x] Unique character assignment per agent (color palette swap)
+- [x] Desk assignment system (FIFO)
+- [x] All event types mapped to office behaviors (full table above)
+- [x] Sub-agent spawning (new character enters when agent spawns)
+- [x] Agent departure animation when session ends
 - **Deliverable:** 3+ simultaneous Claude Code sessions = busy office
 
 ### M3: HUD & Feed (1 session)
 > The "Surveillance" part of J.O.B.S.
 
-- [ ] `J.O.B.S. ONLINE` header with connection status
-- [ ] Agent Roster sidebar (name, state, session uptime)
-- [ ] Activity Feed ticker ("Agent-3 writing auth.ts")
-- [ ] Click agent in roster → camera pans to them
-- [ ] Basic Zustand devtools integration
+- [x] `J.O.B.S. ONLINE` header with connection status
+- [x] Agent Roster sidebar (name, state, session uptime)
+- [x] Activity Feed ticker ("Agent-3 writing auth.ts")
+- [x] Click agent in roster → highlight pulse on sprite
+- [x] Basic Zustand devtools integration
 - **Deliverable:** Full situational awareness of all agent activity
 
 ### M4: Audio & Ambient (1 session)
@@ -374,12 +374,12 @@ open http://your-proxmox-host:8780
 ### M5: Docker & Polish (1 session)
 > Production-ready self-hosted deployment.
 
-- [ ] Dockerfile (multi-stage: build frontend + run server)
-- [ ] docker-compose.yml with volume mount
+- [x] Dockerfile (multi-stage: build frontend + run server)
+- [x] docker-compose.yml with volume mount
 - [ ] README with setup instructions
 - [ ] Proper error handling (bridge disconnects, no sessions, etc.)
-- [ ] Reconnection logic for WebSocket
-- [ ] Loading state / "No active sessions" idle office scene
+- [x] Reconnection logic for WebSocket
+- [x] Loading state / "No active sessions" idle office scene
 - **Deliverable:** `docker compose up -d` and done
 
 ### Future (v2+)
