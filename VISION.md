@@ -382,16 +382,141 @@ open http://your-proxmox-host:8780
 - [x] Loading state / "No active sessions" idle office scene
 - **Deliverable:** `docker compose up -d` and done
 
-### Future (v2+)
-- [ ] Customizable office layouts (JSON tileset config)
-- [ ] LimeZu Modern Office tileset upgrade
-- [ ] PixelLab.ai custom office worker sprites
-- [ ] LibreChat adapter (show chat bot activity)
-- [ ] Generic webhook adapter
-- [ ] Persistent stats dashboard (sessions today, files touched, etc.)
-- [ ] "Screensaver mode" for wall-mounted displays
-- [ ] Custom agent names / avatars
-- [ ] Theme support (dark office, bright startup, cyberpunk)
+---
+
+## v2 Roadmap
+
+> v1 is a screensaver. v2 makes it a dashboard — you should be able to glance at it and know exactly what every agent is doing, whether any need your attention, and what they're working on.
+
+### v2-M1: Agent Clarity — "What are they actually doing?"
+> The single highest-impact upgrade. Surface the data we already have.
+
+- [ ] **Speech/thought bubbles** above sprites showing current activity
+  - Thought cloud for thinking: `"Planning approach..."`
+  - Terminal prompt for bash: `"> running tests"`
+  - File icon for reads/writes: `"auth.ts"`
+  - Search icon for grep/glob: `"handleLogin"`
+  - Bubble auto-fades after a few seconds, replaced by next event
+- [ ] **"Waiting for human" detection** — the most important missing signal
+  - Detect session silence (no new JSONL lines for N seconds after a result)
+  - Differentiate: waiting for human input vs waiting for tool vs actively working
+  - Prominent visual: sprite sits at desk tapping impatiently, `"?"` bubble or `"Waiting for you"`
+  - Pulsing glow or color shift on the agent's desk to draw the eye
+- [ ] **Browser notifications** when an agent needs human input
+  - Opt-in via controls panel
+  - `"Agent-3 is waiting for your input (project: jarvis-jobs)"`
+- [ ] **Time-in-state indicator** above each sprite
+  - Small timer or progress ring showing how long in current state
+  - Color-coded: green (<1min active), yellow (1-5min same state), red (>5min idle/waiting)
+  - Replaces the HUD-only uptime with in-canvas visibility
+- [ ] **State-specific idle animations** improvements
+  - Waiting: tapping desk, looking at watch, checking phone
+  - Error: head in hands, exclamation marks
+  - Thinking: pacing, chin-stroking
+  - Coding: faster typing animation, occasional head-scratch
+- **Deliverable:** Glance at the office and instantly know who needs attention
+
+### v2-M2: Context & Relationships — "What project? What team?"
+> Connect agents to their work and to each other.
+
+- [ ] **Project labels** on agents
+  - Show project/repo name beneath or beside the sprite (basename from session path)
+  - Group agents by project in the HUD roster with collapsible sections
+- [ ] **Agent team visualization**
+  - When a parent agent spawns sub-agents via Task, visually connect them
+  - Shared desk cluster: parent at one desk, sub-agents at adjacent desks
+  - Subtle connecting line or shared highlight color between team members
+  - When parent is waiting on sub-agents, show that dependency: `"Waiting on 2 agents"`
+- [ ] **Agent detail panel** (click agent in roster or click sprite)
+  - Expanded card showing: project name, current file/tool, state history timeline, session duration, tools used breakdown, parent/child relationships
+  - Styled as a pixel-art dossier/file folder
+  - Stays open until dismissed, updates in real-time
+- [ ] **Agent naming**
+  - Auto-assign memorable names (e.g., "Ada", "Grace", "Linus") instead of UUID prefixes
+  - Optional custom name override via config
+- [ ] **Session history timeline** in detail panel
+  - Horizontal bar showing state transitions over time
+  - Color-coded segments: blue=coding, purple=thinking, green=terminal, yellow=searching, gray=idle, red=error
+  - Hover a segment to see what tool/file was active
+- **Deliverable:** Understand the full context of every agent at a glance
+
+### v2-M3: Audio & Ambient — "Make it feel alive"
+> The deferred v1-M4. Bring the office to life with sound and visual effects.
+
+- [ ] **Keyboard clacking** — proximity-based volume, active when agent is coding/typing
+- [ ] **Coffee machine** — brewing sound when agents visit coffee station
+- [ ] **Ambient office hum** — constant low-volume background (HVAC, murmur)
+- [ ] **Retro chimes** — distinct sounds for: agent spawn (door bell), agent complete (success jingle), error (alert tone), waiting for input (gentle notification)
+- [ ] **Audio toggle** in controls panel (mute/unmute, volume slider)
+- [ ] **Screen glow** on active desks — monitors emit subtle animated light when agent is coding
+- [ ] **Clock** showing real time on the office wall
+- [ ] **Steam/particles** from coffee machine when in use
+- [ ] **Day/night cycle** — office lighting shifts based on real time of day
+- **Deliverable:** Put it on a monitor, leave it running, it's beautiful
+
+### v2-M4: Visual Upgrade — "Make it gorgeous"
+> Replace placeholder graphics with proper pixel art.
+
+- [ ] **LimeZu Modern Office tileset** ($2.50, commercial use OK)
+  - Proper desks, chairs, computers, bookshelves, coffee area
+  - Wall decorations, plants, windows
+  - Configurable via JSON tileset config
+- [ ] **PixelLab.ai custom sprites** — AI-generated office worker characters
+  - More than 8 characters, diverse appearances
+  - Richer animation states (sitting, typing, standing, walking, gesturing)
+  - Idle animations per station (not just direction + bob)
+- [ ] **Customizable office layouts** — JSON-driven tileset config
+  - Users can rearrange desks, add rooms, resize office
+  - Preset layouts: startup (open plan), corporate (cubicles), cozy (small team)
+- [ ] **Theme support**
+  - Dark office (default), bright startup, cyberpunk neon, retro terminal green
+  - Affects tilemap colors, HUD styling, ambient lighting
+- **Deliverable:** Screenshot-worthy pixel art office
+
+### v2-M5: Dashboard & Integrations — "Beyond Claude Code"
+> Turn J.O.B.S. into a persistent operational dashboard.
+
+- [ ] **Persistent stats dashboard**
+  - Sessions today, total session hours, files touched, tools used breakdown
+  - Per-agent history: past sessions, average duration, most-used tools
+  - Stored in SQLite or JSON file, survives restarts
+- [ ] **"Screensaver mode"** for wall-mounted displays
+  - Auto-zoom to active area, hide HUD when idle, cinematic camera pans
+  - Show ambient stats overlay (sessions today, uptime)
+  - Perfect for office TV or Proxmox display
+- [ ] **LibreChat adapter** — show chat bot activity as additional agents
+- [ ] **Generic webhook adapter** — accept events from any source via HTTP POST
+  - Standardized event schema, map to office behaviors
+  - Could visualize CI/CD, deployments, monitoring alerts
+- [ ] **Multi-instance support** — watch multiple machines' Claude dirs
+  - Aggregate sessions from multiple dev machines into one office
+- **Deliverable:** A living, always-on dashboard for your AI operations
+
+### Moonshot: Live Terminal View
+> Click a sprite, see its live session — a visual Claude Code dashboard.
+
+- [ ] **On-demand terminal streaming** — client subscribes to a session's raw output via WS
+  - New WS message type: `{ type: 'terminal', sessionId, lines }`
+  - Server streams parsed JSONL on request, stops when client unsubscribes
+- [ ] **xterm.js panel** — slide-out or modal, styled to match pixel aesthetic
+  - Shows conversation flow: assistant text, tool calls, results
+  - Syntax highlighting for code blocks
+  - Auto-scroll with pause-on-hover
+- [ ] **Sub-agent tree view** — parent → child sessions, click any node to view
+  - Collapsible tree in the terminal panel sidebar
+  - Shows state and activity summary per node
+  - Navigate between sessions without closing the panel
+- [ ] **Access control** — localhost-only by default, optional token auth
+  - Config flag: `TERMINAL_ACCESS=local|token|disabled`
+  - Token auth for remote access behind reverse proxy
+- [ ] **Unfiltered adapter path** alongside the privacy-stripped broadcast
+  - Separate pipeline: raw JSONL → terminal formatter → subscribed clients only
+  - Never broadcasts unfiltered data to all clients
+  - Clear visual indicator when terminal view is active
+- [ ] **Interactive mode** (stretch goal) — send input back to Claude Code session
+  - Type in the terminal panel, input goes to the JSONL session
+  - Essentially a remote Claude Code client embedded in J.O.B.S.
+- **Deliverable:** Full visibility into any agent's session, from the office view
 
 ---
 
@@ -402,10 +527,10 @@ open http://your-proxmox-host:8780
 | pixelhq-bridge | github.com/waynedev9598/pixelhq-bridge | MIT |
 | a16z/ai-town (sprites + engine ref) | github.com/a16z-infra/ai-town | MIT |
 | PixiJS | pixijs.com | MIT |
-| @pixi/react | github.com/pixijs/pixi-react | MIT |
 | Zustand | github.com/pmndrs/zustand | MIT |
 | Howler.js | howlerjs.com | MIT |
 | pathfinding (npm) | npmjs.com/package/pathfinding | MIT |
+| xterm.js | xtermjs.org | MIT |
 | LimeZu Modern Office (v1.5) | limezu.itch.io/modernoffice | Commercial use OK |
 | PixelLab.ai (v2 sprites) | pixellab.ai | Subscription |
 | freesound.org (audio) | freesound.org | CC0 |
