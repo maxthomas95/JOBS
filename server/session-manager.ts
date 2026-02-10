@@ -38,7 +38,7 @@ export class SessionManager {
   private nextCharacterIndex = 0;
   private readonly staleIdleMs: number;
   private readonly staleEvictMs: number;
-  private readonly waitingThresholdMs = 15000;
+  private readonly waitingThresholdMs = 60000;
   private onSnapshotNeeded: (() => void) | null = null;
 
   constructor(staleIdleMs = Number(process.env.STALE_IDLE_MS ?? 300000), staleEvictMs = Number(process.env.STALE_EVICT_MS ?? 900000)) {
@@ -227,7 +227,7 @@ export class SessionManager {
       const now = Date.now();
       let changed = false;
       for (const agent of this.agents.values()) {
-        const isWaitingEvent = agent.lastEventType === 'activity.user_prompt' || agent.lastEventType === 'activity.waiting';
+        const isWaitingEvent = agent.lastEventType === 'activity.waiting';
         const elapsed = now - agent.lastEventAt;
         if (isWaitingEvent && elapsed > this.waitingThresholdMs && !agent.waitingForHuman) {
           agent.waitingForHuman = true;

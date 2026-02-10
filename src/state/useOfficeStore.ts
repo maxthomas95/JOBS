@@ -123,9 +123,19 @@ export const useOfficeStore = create<OfficeState>()(
     },
 
     handleSnapshot: (agents) => {
+      const state = get();
+      const prevAgents = state.agents;
       const map = new Map<string, Agent>();
       for (const agent of agents) {
         map.set(agent.id, agent);
+        // Notify if agent just became waiting-for-human
+        if (agent.waitingForHuman && state.notificationsEnabled) {
+          const prev = prevAgents.get(agent.id);
+          if (!prev?.waitingForHuman) {
+            const shortId = agent.id.slice(0, 8);
+            sendBrowserNotification(`Agent ${shortId} is waiting for your input`);
+          }
+        }
       }
       set({ agents: map });
     },
@@ -187,12 +197,8 @@ export const useOfficeStore = create<OfficeState>()(
           patch.targetPosition = tileToWorld(STATIONS.coffee);
           patch.activityText = 'Waiting...';
         } else if (event.action === 'user_prompt') {
+          // user_prompt fires during normal tool approvals, don't flag as waiting
           patch.activityText = null;
-          patch.waitingForHuman = true;
-          if (!existing.waitingForHuman && state.notificationsEnabled) {
-            const shortId = existing.id.slice(0, 8);
-            sendBrowserNotification(`Agent ${shortId} is waiting for your input`);
-          }
         }
       } else if (event.type === 'tool' && event.status === 'started') {
         const toolState = classifyTool(event.tool);

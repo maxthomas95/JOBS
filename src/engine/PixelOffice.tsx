@@ -2,9 +2,11 @@ import { useEffect, useRef } from 'react';
 import { Application, Container } from 'pixi.js';
 import { renderTileMap } from './TileMap.js';
 import { AnimationController } from './AnimationController.js';
+import { BubbleOverlay } from '../ui/BubbleOverlay.js';
 
 export function PixelOffice() {
   const hostRef = useRef<HTMLDivElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {
     if (!hostRef.current) {
@@ -40,6 +42,7 @@ export function PixelOffice() {
       world.addChild(agentsLayer);
       app.stage.addChild(world);
       hostRef.current?.appendChild(app.canvas);
+      canvasRef.current = app.canvas;
 
       controller = new AnimationController(app, agentsLayer);
       await controller.init();
@@ -49,11 +52,16 @@ export function PixelOffice() {
       destroyed = true;
       controller?.destroy();
       app.destroy(true, { children: true });
+      canvasRef.current = null;
       if (hostRef.current) {
         hostRef.current.innerHTML = '';
       }
     };
   }, []);
 
-  return <div className="pixel-office" ref={hostRef} />;
+  return (
+    <div className="pixel-office" ref={hostRef}>
+      <BubbleOverlay canvasRef={canvasRef} />
+    </div>
+  );
 }
