@@ -33,6 +33,20 @@ export class WSServer {
     }, 30000).unref();
   }
 
+  broadcastSnapshot(): void {
+    const message: WSMessage = {
+      type: 'snapshot',
+      agents: this.sessionManager.getSnapshot(),
+      timestamp: Date.now(),
+    };
+    const data = JSON.stringify(message);
+    for (const client of this.wss.clients) {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(data);
+      }
+    }
+  }
+
   broadcast(event: PixelEvent): void {
     const message: WSMessage = { type: 'event', payload: event };
     const data = JSON.stringify(message);

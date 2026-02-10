@@ -48,6 +48,7 @@ if (useMock) {
     });
     sessionManager.handleEvent(started);
     wsServer.broadcast(started);
+    wsServer.broadcastSnapshot();
   });
 
   watcher.on('line', ({ line, sessionId, agentId }) => {

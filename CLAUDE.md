@@ -8,10 +8,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Tech Stack
 
-- **Frontend:** React 18 + TypeScript + PixiJS 8 (@pixi/react) + Zustand 5
+- **Frontend:** React 19 + TypeScript + PixiJS 8 (imperative API) + Zustand 5
 - **Backend:** Node.js + Express (static serving) + ws (WebSocket)
 - **Build:** Vite 6
-- **File watching:** chokidar 4 (monitors `~/.claude/projects/**/*.jsonl`)
+- **File watching:** chokidar 5 (monitors `~/.claude/projects/` with ignored filter)
 - **Pathfinding:** pathfinding (A* grid)
 - **Audio:** Howler.js 2.2
 - **Deployment:** Docker + docker-compose, single container on port 8780
