@@ -275,6 +275,7 @@ Simple 20x15 tile grid (16px tiles = 320x240 native, scaled up):
 - **Terminal:** Command execution. Agents stand at a big terminal display.
 - **Coffee Machine:** Idle/cooling between turns. Social area.
 - **Door:** Entry/exit. Agents spawn here and walk to their desk.
+- **Mid-office (v2-M3):** Supervisor patrol zone. Team leads walk between sub-agent desks, check in, and pace here while waiting on results.
 
 ---
 
@@ -391,25 +392,25 @@ open http://your-proxmox-host:8780
 ### v2-M1: Agent Clarity — "What are they actually doing?"
 > The single highest-impact upgrade. Surface the data we already have.
 
-- [ ] **Speech/thought bubbles** above sprites showing current activity
+- [x] **Speech/thought bubbles** above sprites showing current activity
   - Thought cloud for thinking: `"Planning approach..."`
   - Terminal prompt for bash: `"> running tests"`
   - File icon for reads/writes: `"auth.ts"`
   - Search icon for grep/glob: `"handleLogin"`
   - Bubble auto-fades after a few seconds, replaced by next event
-- [ ] **"Waiting for human" detection** — the most important missing signal
+- [x] **"Waiting for human" detection** — the most important missing signal
   - Detect session silence (no new JSONL lines for N seconds after a result)
   - Differentiate: waiting for human input vs waiting for tool vs actively working
   - Prominent visual: sprite sits at desk tapping impatiently, `"?"` bubble or `"Waiting for you"`
   - Pulsing glow or color shift on the agent's desk to draw the eye
-- [ ] **Browser notifications** when an agent needs human input
+- [x] **Browser notifications** when an agent needs human input
   - Opt-in via controls panel
   - `"Agent-3 is waiting for your input (project: jarvis-jobs)"`
-- [ ] **Time-in-state indicator** above each sprite
+- [x] **Time-in-state indicator** above each sprite
   - Small timer or progress ring showing how long in current state
   - Color-coded: green (<1min active), yellow (1-5min same state), red (>5min idle/waiting)
   - Replaces the HUD-only uptime with in-canvas visibility
-- [ ] **State-specific idle animations** improvements
+- [ ] **State-specific idle animations** improvements (deferred — requires richer sprite assets)
   - Waiting: tapping desk, looking at watch, checking phone
   - Error: head in hands, exclamation marks
   - Thinking: pacing, chin-stroking
@@ -440,7 +441,37 @@ open http://your-proxmox-host:8780
   - Hover a segment to see what tool/file was active
 - **Deliverable:** Understand the full context of every agent at a glance
 
-### v2-M3: Audio & Ambient — "Make it feel alive"
+### v2-M3: Supervisor Mode — "Who's the boss?"
+> Parent agents become team leads who walk the floor and check on their sub-agents.
+
+- [ ] **Supervisor role detection** — automatically tag parent agents that spawned sub-agents
+  - Parent agent (the one that called `tool.spawn_agent`) gets a `role: 'supervisor'` flag
+  - Visual differentiation: distinct sprite, badge/hat overlay, or subtle glow/outline
+  - HUD roster shows supervisor icon next to team lead agents
+- [ ] **Patrol behavior** — supervisors walk between their sub-agents' desks
+  - When not actively coding/thinking, supervisor periodically walks to each child agent's desk
+  - Patrol route visits each sub-agent in order, pauses briefly at each desk
+  - Configurable patrol frequency (default: every 30-60 seconds of idle time)
+- [ ] **Check-in interactions** — supervisor "talks to" sub-agents
+  - When supervisor arrives at a sub-agent's desk, play a brief interaction animation
+  - Speech bubble from supervisor: `"Checking progress..."`, `"How's auth.ts?"` (uses child's current file context)
+  - Sub-agent responds with their current state: `"Writing tests"`, `"Waiting for input"`
+  - Interaction lasts 2-3 seconds before supervisor moves to the next agent
+- [ ] **Delegation visualization** — show the moment work is assigned
+  - When `tool.spawn_agent` fires, supervisor walks to the door, new agent enters
+  - Supervisor walks new agent to their assigned desk (escort animation)
+  - Brief handoff animation: supervisor gestures at desk, sub-agent sits down
+- [ ] **Waiting-on-team state** — supervisor behavior while sub-agents work
+  - When supervisor is waiting on sub-agent results, show them pacing or standing mid-office
+  - Bubble: `"Waiting on 2 agents"` (count of active children)
+  - When a sub-agent completes, supervisor walks over to "collect" the result
+- [ ] **Team summary in HUD** — supervisor section in roster
+  - Collapsible team group headed by supervisor name
+  - Shows: sub-agent count, how many active vs complete, team progress indicator
+  - Click supervisor in roster to highlight the entire team (supervisor + all children)
+- **Deliverable:** Parent agents visibly manage their team — walk the floor, check in, delegate, and wait for results
+
+### v2-M4: Audio & Ambient — "Make it feel alive"
 > The deferred v1-M4. Bring the office to life with sound and visual effects.
 
 - [ ] **Keyboard clacking** — proximity-based volume, active when agent is coding/typing
@@ -454,7 +485,7 @@ open http://your-proxmox-host:8780
 - [ ] **Day/night cycle** — office lighting shifts based on real time of day
 - **Deliverable:** Put it on a monitor, leave it running, it's beautiful
 
-### v2-M4: Visual Upgrade — "Make it gorgeous"
+### v2-M5: Visual Upgrade — "Make it gorgeous"
 > Replace placeholder graphics with proper pixel art.
 
 - [ ] **LimeZu Modern Office tileset** ($2.50, commercial use OK)
@@ -473,7 +504,7 @@ open http://your-proxmox-host:8780
   - Affects tilemap colors, HUD styling, ambient lighting
 - **Deliverable:** Screenshot-worthy pixel art office
 
-### v2-M5: Dashboard & Integrations — "Beyond Claude Code"
+### v2-M6: Dashboard & Integrations — "Beyond Claude Code"
 > Turn J.O.B.S. into a persistent operational dashboard.
 
 - [ ] **Persistent stats dashboard**
