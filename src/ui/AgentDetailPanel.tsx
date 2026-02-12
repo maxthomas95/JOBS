@@ -51,6 +51,7 @@ export function AgentDetailPanel() {
   const agents = useOfficeStore((s) => s.agents);
   const agentHistory = useOfficeStore((s) => s.agentHistory);
   const agentToolCounts = useOfficeStore((s) => s.agentToolCounts);
+  const agentToolTime = useOfficeStore((s) => s.agentToolTime);
   const selectAgent = useOfficeStore((s) => s.selectAgent);
 
   const [now, setNow] = useState(Date.now());
@@ -68,11 +69,16 @@ export function AgentDetailPanel() {
 
   const history = agentHistory.get(selectedAgentId) ?? [];
   const toolCounts = agentToolCounts.get(selectedAgentId) ?? new Map<string, number>();
+  const toolTimes = agentToolTime.get(selectedAgentId) ?? new Map<string, number>();
   const sessionStart = history.length > 0 ? history[0].timestamp : agent.lastEventAt;
   const duration = now - sessionStart;
 
-  // Sort tools by count descending
-  const sortedTools = Array.from(toolCounts.entries()).sort((a, b) => b[1] - a[1]);
+  // Sort tools by total time descending (fall back to count)
+  const sortedTools = Array.from(toolCounts.entries()).sort((a, b) => {
+    const timeA = toolTimes.get(a[0]) ?? 0;
+    const timeB = toolTimes.get(b[0]) ?? 0;
+    return timeB - timeA || b[1] - a[1];
+  });
 
   // Build timeline segments with duration for tooltip
   const timelineSegments: Array<{ state: AgentState; fraction: number; durationMs: number }> = [];
@@ -187,12 +193,20 @@ export function AgentDetailPanel() {
         <div className="detail-section">
           <div className="detail-label">Tools Used</div>
           <div className="detail-tools">
-            {sortedTools.map(([tool, count]) => (
-              <div key={tool} className="tool-row">
-                <span className="tool-name">{tool}</span>
-                <span className="tool-count">{count}</span>
-              </div>
-            ))}
+            {sortedTools.map(([tool, count]) => {
+              const totalMs = toolTimes.get(tool) ?? 0;
+              return (
+                <div key={tool} className="tool-row">
+                  <span className="tool-name">{tool}</span>
+                  <span className="tool-stats">
+                    <span className="tool-count">{count}x</span>
+                    {totalMs > 0 ? (
+                      <span className="tool-time">{formatDuration(totalMs)}</span>
+                    ) : null}
+                  </span>
+                </div>
+              );
+            })}
           </div>
         </div>
       ) : null}

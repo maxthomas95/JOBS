@@ -16,6 +16,10 @@ interface OfficeState {
   notificationsEnabled: boolean;
   agentHistory: Map<string, StateEntry[]>;
   agentToolCounts: Map<string, Map<string, number>>;
+  /** Total milliseconds spent per tool per agent */
+  agentToolTime: Map<string, Map<string, number>>;
+  /** In-flight tool start timestamps keyed by toolUseId */
+  pendingToolStarts: Map<string, number>;
   addAgent: (agent: Agent) => void;
   updateAgent: (id: string, patch: Partial<Agent>) => void;
   removeAgent: (id: string) => void;
@@ -102,6 +106,8 @@ export const useOfficeStore = create<OfficeState>()(
     notificationsEnabled: false,
     agentHistory: new Map<string, StateEntry[]>(),
     agentToolCounts: new Map<string, Map<string, number>>(),
+    agentToolTime: new Map<string, Map<string, number>>(),
+    pendingToolStarts: new Map<string, number>(),
 
     addAgent: (agent) => {
       set((state) => {
@@ -246,13 +252,34 @@ export const useOfficeStore = create<OfficeState>()(
         set({ agentHistory: nextHistory });
       }
 
-      // Track tool counts
-      if (event.type === 'tool' && event.status === 'started') {
-        const counts = state.agentToolCounts.get(existing.id) ?? new Map<string, number>();
-        counts.set(event.tool, (counts.get(event.tool) ?? 0) + 1);
-        const nextCounts = new Map(state.agentToolCounts);
-        nextCounts.set(existing.id, counts);
-        set({ agentToolCounts: nextCounts });
+      // Track tool counts and time
+      if (event.type === 'tool') {
+        if (event.status === 'started') {
+          const counts = state.agentToolCounts.get(existing.id) ?? new Map<string, number>();
+          counts.set(event.tool, (counts.get(event.tool) ?? 0) + 1);
+          const nextCounts = new Map(state.agentToolCounts);
+          nextCounts.set(existing.id, counts);
+
+          // Record start time for duration tracking
+          const nextPending = new Map(state.pendingToolStarts);
+          const key = event.toolUseId ?? `${existing.id}:${event.tool}:${event.timestamp}`;
+          nextPending.set(key, event.timestamp);
+          set({ agentToolCounts: nextCounts, pendingToolStarts: nextPending });
+        } else if (event.status === 'completed' || event.status === 'error') {
+          // Compute elapsed time from matching start
+          const key = event.toolUseId ?? '';
+          const startTime = state.pendingToolStarts.get(key);
+          if (startTime) {
+            const elapsed = event.timestamp - startTime;
+            const times = state.agentToolTime.get(existing.id) ?? new Map<string, number>();
+            times.set(event.tool, (times.get(event.tool) ?? 0) + elapsed);
+            const nextTimes = new Map(state.agentToolTime);
+            nextTimes.set(existing.id, times);
+            const nextPending = new Map(state.pendingToolStarts);
+            nextPending.delete(key);
+            set({ agentToolTime: nextTimes, pendingToolStarts: nextPending });
+          }
+        }
       }
 
       state.updateAgent(existing.id, patch);
