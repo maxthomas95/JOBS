@@ -3,6 +3,7 @@ import { devtools, subscribeWithSelector } from 'zustand/middleware';
 import type { Agent, AgentState, Point } from '../types/agent.js';
 import { STATIONS, tileToWorld } from '../types/agent.js';
 import type { PixelEvent } from '../types/events.js';
+import { audioManager } from '../audio/AudioManager.js';
 
 export interface StateEntry {
   state: AgentState;
@@ -194,6 +195,8 @@ export const useOfficeStore = create<OfficeState>()(
           childIds: [],
         };
         state.addAgent(newAgent);
+        // Sound: new agent arrival
+        audioManager.play('door-bell');
         // Link child to parent's childIds
         if (parentId) {
           const parent = state.agents.get(parentId);
@@ -226,6 +229,7 @@ export const useOfficeStore = create<OfficeState>()(
         } else {
           patch.state = 'leaving';
           patch.targetPosition = tileToWorld(STATIONS.door);
+          audioManager.play('door-bell-quiet');
           setTimeout(() => {
             get().removeAgent(existing.id);
           }, 2000);
@@ -243,6 +247,7 @@ export const useOfficeStore = create<OfficeState>()(
           patch.state = 'waiting';
           patch.targetPosition = tileToWorld(STATIONS.coffee);
           patch.activityText = 'Waiting...';
+          audioManager.play('waiting-ping');
         } else if (event.action === 'user_prompt') {
           // Human sent a message — transition to thinking immediately
           patch.state = 'thinking';
@@ -254,14 +259,20 @@ export const useOfficeStore = create<OfficeState>()(
         patch.state = toolState;
         patch.targetPosition = targetFor(existing, toolState, event.tool);
         patch.activityText = event.context ?? event.tool;
+        if (toolState === 'delegating') {
+          audioManager.play('delegation-chime');
+        }
       } else if (event.type === 'summary') {
         patch.state = 'cooling';
         patch.targetPosition = tileToWorld(STATIONS.coffee);
         patch.activityText = 'Taking a break';
+        audioManager.play('task-complete');
       } else if (event.type === 'agent' && event.action === 'error') {
         patch.state = 'error';
+        audioManager.play('error-alert');
       } else if (event.type === 'error') {
         patch.state = 'error';
+        audioManager.play('error-alert');
       }
 
       if (patch.state && patch.state !== existing.state) {

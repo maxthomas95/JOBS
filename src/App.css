@@ -324,6 +324,55 @@
   background: rgba(30, 35, 50, 0.8);
 }
 
+.audio-toggle {
+  pointer-events: auto;
+  font-family: inherit;
+  font-size: 0.6rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  background: rgba(10, 12, 18, 0.7);
+  border: 1px solid #4a5167;
+  border-radius: 999px;
+  padding: 0.35rem 0.55rem;
+  color: inherit;
+  cursor: pointer;
+}
+
+.audio-toggle:hover {
+  background: rgba(30, 35, 50, 0.8);
+}
+
+.audio-volume {
+  pointer-events: auto;
+  width: 50px;
+  height: 4px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: rgba(74, 81, 103, 0.6);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+}
+
+.audio-volume::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #e8edf5;
+  border: 1px solid #4a5167;
+  cursor: pointer;
+}
+
+.audio-volume::-moz-range-thumb {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #e8edf5;
+  border: 1px solid #4a5167;
+  cursor: pointer;
+}
+
 .detail-panel {
   position: absolute;
   top: 3.2rem;

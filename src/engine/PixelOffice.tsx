@@ -15,6 +15,7 @@ export function PixelOffice() {
 
     const app = new Application();
     const world = new Container();
+    const ambientLayer = new Container();
     const agentsLayer = new Container();
 
     let controller: AnimationController | null = null;
@@ -39,12 +40,13 @@ export function PixelOffice() {
       app.canvas.style.imageRendering = 'pixelated';
 
       renderTileMap(world);
+      world.addChild(ambientLayer);
       world.addChild(agentsLayer);
       app.stage.addChild(world);
       hostRef.current?.appendChild(app.canvas);
       canvasRef.current = app.canvas;
 
-      controller = new AnimationController(app, agentsLayer);
+      controller = new AnimationController(app, agentsLayer, ambientLayer);
       await controller.init();
     })();
 

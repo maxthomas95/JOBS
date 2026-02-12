@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { ConnectionStatus } from './ConnectionStatus.js';
 import { useOfficeStore } from '../state/useOfficeStore.js';
 import { useEventStore } from '../state/useEventStore.js';
+import { useAudioStore } from '../state/useAudioStore.js';
 import type { Agent, AgentState } from '../types/agent.js';
 import type { PixelEvent } from '../types/events.js';
 
@@ -136,6 +137,10 @@ export function HUD() {
   const notificationsEnabled = useOfficeStore((state) => state.notificationsEnabled);
   const toggleNotifications = useOfficeStore((state) => state.toggleNotifications);
   const events = useEventStore((state) => state.events);
+  const audioEnabled = useAudioStore((state) => state.enabled);
+  const audioVolume = useAudioStore((state) => state.volume);
+  const toggleAudio = useAudioStore((state) => state.toggleEnabled);
+  const setAudioVolume = useAudioStore((state) => state.setVolume);
   const count = agents.size;
   const allAgents = Array.from(agents.values()).slice(0, 10);
   const projectGroups = groupByProject(allAgents, agents);
@@ -211,6 +216,24 @@ export function HUD() {
       <header className="hud-header">
         <h1>J.O.B.S. ONLINE</h1>
         <div className="hud-header-right">
+          <button
+            className="audio-toggle"
+            onClick={toggleAudio}
+            title={audioEnabled ? 'Mute audio' : 'Enable audio'}
+          >
+            {audioEnabled ? 'SFX ON' : 'SFX OFF'}
+          </button>
+          {audioEnabled ? (
+            <input
+              type="range"
+              className="audio-volume"
+              min={0}
+              max={100}
+              value={audioVolume}
+              onChange={(e) => setAudioVolume(Number(e.target.value))}
+              title={`Volume: ${audioVolume}%`}
+            />
+          ) : null}
           <button
             className="notification-toggle"
             onClick={toggleNotifications}

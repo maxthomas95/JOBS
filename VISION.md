@@ -364,12 +364,12 @@ open http://your-proxmox-host:8780
 ### M4: Audio & Ambient (deferred to v2)
 > Make it feel alive.
 
-- [ ] Keyboard clacking (proximity to active desk)
-- [ ] Coffee machine brewing (when agents idle)
-- [ ] Ambient office hum (constant, low volume)
-- [ ] Retro chimes: agent spawn, agent complete, error alert
-- [ ] Audio toggle in controls
-- [ ] Ambient effects: screen glow on active desks, clock showing real time
+- [x] Keyboard clacking (proximity to active desk)
+- [x] Coffee machine brewing (when agents idle)
+- [x] Ambient office hum (constant, low volume)
+- [x] Retro chimes: agent spawn, agent complete, error alert
+- [x] Audio toggle in controls
+- [x] Ambient effects: screen glow on active desks, clock showing real time
 - **Deliverable:** Put it on a monitor, leave it running, it's beautiful
 
 ### M5: Docker & Polish (1 session)
@@ -474,16 +474,44 @@ open http://your-proxmox-host:8780
 ### v2-M4: Audio & Ambient — "Make it feel alive"
 > The deferred v1-M4. Bring the office to life with sound and visual effects.
 
-- [ ] **Keyboard clacking** — proximity-based volume, active when agent is coding/typing
-- [ ] **Coffee machine** — brewing sound when agents visit coffee station
-- [ ] **Ambient office hum** — constant low-volume background (HVAC, murmur)
-- [ ] **Retro chimes** — distinct sounds for: agent spawn (door bell), agent complete (success jingle), error (alert tone), waiting for input (gentle notification)
-- [ ] **Audio toggle** in controls panel (mute/unmute, volume slider)
-- [ ] **Screen glow** on active desks — monitors emit subtle animated light when agent is coding
-- [ ] **Clock** showing real time on the office wall
-- [ ] **Steam/particles** from coffee machine when in use
+- [x] **Keyboard clacking** — proximity-based volume, active when agent is coding/typing
+- [x] **Coffee machine** — brewing sound when agents visit coffee station
+- [x] **Ambient office hum** — constant low-volume background (HVAC, murmur)
+- [x] **Retro chimes** — distinct sounds for: agent spawn (door bell), agent complete (success jingle), error (alert tone), waiting for input (gentle notification)
+- [x] **Audio toggle** in controls panel (mute/unmute, volume slider)
+- [x] **Screen glow** on active desks — monitors emit subtle animated light when agent is coding
+- [x] **Clock** showing real time on the office wall
+- [x] **Steam/particles** from coffee machine when in use
 - [ ] **Day/night cycle** — office lighting shifts based on real time of day
 - **Deliverable:** Put it on a monitor, leave it running, it's beautiful
+
+### v2-M4.5: Audio Polish — "Make it sound right"
+> Replace programmer-art oscillator sounds with real audio samples. The plumbing is done — AudioManager, store, event wiring, loop management, HUD controls all work. Just need better sounds.
+
+- [ ] **Source real samples** — browse freesound.org (CC0) for office sounds, or use jsfxr for tuned retro effects
+  - Keyboard clacking loop (mechanical keyboard, not too aggressive)
+  - Coffee machine / kettle bubbling
+  - Ambient office hum (HVAC, distant murmur)
+  - Page turning / paper rustling
+  - Terminal typing (clunkier than keyboard)
+  - Paper shuffle / filing cabinet
+- [ ] **Source or generate chime samples** — jsfxr or freesound
+  - Door bell (arrival) — friendly two-tone
+  - Door bell (departure) — softer/descending variant
+  - Task complete — satisfying success jingle
+  - Error alert — distinctive but not annoying
+  - Waiting ping — gentle notification
+  - Delegation chime — handoff motif
+  - Check-in ping — subtle attention sound
+- [ ] **Switch to Howler.js** for file-based playback (replaces raw Web Audio API oscillators)
+  - `npm install howler` + `@types/howler`
+  - Rewrite AudioManager to load .ogg files via Howl instances
+  - Keep the same `play()` / `startLoop()` / `stopLoop()` API
+  - Pre-load all sounds on first unlock
+- [ ] **Add .ogg files** to `src/assets/audio/` (bundled by Vite)
+- [ ] **Tune volumes and timing** — get the balance right between ambient, loops, and one-shots
+- [ ] **Day/night cycle** — office lighting shifts based on real time of day
+- **Deliverable:** Sounds you'd actually want to leave on
 
 ### v2-M5: Visual Upgrade — "Make it gorgeous"
 > Replace placeholder graphics with proper pixel art.
