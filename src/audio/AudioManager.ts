@@ -81,18 +81,11 @@ class AudioManager {
 
   /** Play a one-shot sound */
   play(id: SoundId): void {
-    if (!this._enabled) {
-      console.log(`[audio] play(${id}) skipped — disabled`);
-      return;
-    }
+    if (!this._enabled) return;
     const howl = this.sounds.get(id);
     if (howl) {
-      const vol = SOUND_VOLUMES[id] * this._volume;
-      console.log(`[audio] play(${id}) vol=${vol.toFixed(2)} state=${howl.state()}`);
-      howl.volume(vol);
+      howl.volume(SOUND_VOLUMES[id] * this._volume);
       howl.play();
-    } else {
-      console.warn(`[audio] play(${id}) — no Howl instance found! loaded=${this.loaded}`);
     }
   }
 
@@ -106,7 +99,6 @@ class AudioManager {
     if (pending) {
       clearTimeout(pending);
       this.fadeTimeouts.delete(id);
-      console.log(`[audio] startLoop(${id}) — cancelled pending fade-out`);
     }
 
     const howl = this.loops.get(id);
@@ -115,11 +107,9 @@ class AudioManager {
       if (howl.playing()) {
         // Was fading out — restore volume instead of starting a new instance
         howl.volume(targetVol);
-        console.log(`[audio] startLoop(${id}) — restored fading instance`);
       } else {
         howl.volume(targetVol);
         howl.play();
-        console.log(`[audio] startLoop(${id}) — new play`);
       }
       this.activeLoops.add(id);
     }
@@ -129,7 +119,6 @@ class AudioManager {
   stopLoop(id: LoopId): void {
     if (!this.activeLoops.has(id)) return;
     this.activeLoops.delete(id);
-    console.log(`[audio] stopLoop(${id})`);
 
     const howl = this.loops.get(id);
     if (howl) {
