@@ -30,10 +30,18 @@ export interface Agent {
   stateChangedAt: number;
   /** Short text describing current activity (e.g. "auth.ts", "running tests") */
   activityText: string | null;
+  /** Memorable display name assigned by server (e.g. "Ada", "Grace") */
+  name: string | null;
+  /** Claude Code-assigned role/agent name (e.g. "m2-builder", "researcher") */
+  roleName: string | null;
   /** Project/repo basename this agent is working on */
   project: string | null;
   /** Whether the agent is waiting for human input */
   waitingForHuman: boolean;
+  /** Session ID of the parent agent that spawned this one via Task tool */
+  parentId: string | null;
+  /** Session IDs of child agents spawned by this agent */
+  childIds: string[];
 }
 
 export const TILE_SIZE = 16;

@@ -11,9 +11,11 @@ export interface SessionEvent extends BaseEvent {
   type: 'session';
   action: 'started' | 'ended';
   project?: string;
+  roleName?: string;
   source?: string;
   characterIndex?: number;
   deskIndex?: number | null;
+  name?: string;
 }
 
 export interface ActivityEvent extends BaseEvent {

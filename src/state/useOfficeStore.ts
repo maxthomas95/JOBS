@@ -4,16 +4,25 @@ import type { Agent, AgentState, Point } from '../types/agent.js';
 import { STATIONS, tileToWorld } from '../types/agent.js';
 import type { PixelEvent } from '../types/events.js';
 
+export interface StateEntry {
+  state: AgentState;
+  timestamp: number;
+}
+
 interface OfficeState {
   agents: Map<string, Agent>;
   focusedAgentId: string | null;
+  selectedAgentId: string | null;
   notificationsEnabled: boolean;
+  agentHistory: Map<string, StateEntry[]>;
+  agentToolCounts: Map<string, Map<string, number>>;
   addAgent: (agent: Agent) => void;
   updateAgent: (id: string, patch: Partial<Agent>) => void;
   removeAgent: (id: string) => void;
   handleSnapshot: (agents: Agent[]) => void;
   handleEvent: (event: PixelEvent) => void;
   focusAgent: (id: string | null) => void;
+  selectAgent: (id: string | null) => void;
   toggleNotifications: () => void;
 }
 
@@ -89,7 +98,10 @@ export const useOfficeStore = create<OfficeState>()(
     subscribeWithSelector((set, get) => ({
     agents: new Map<string, Agent>(),
     focusedAgentId: null,
+    selectedAgentId: null,
     notificationsEnabled: false,
+    agentHistory: new Map<string, StateEntry[]>(),
+    agentToolCounts: new Map<string, Map<string, number>>(),
 
     addAgent: (agent) => {
       set((state) => {
@@ -132,8 +144,9 @@ export const useOfficeStore = create<OfficeState>()(
         if (agent.waitingForHuman && state.notificationsEnabled) {
           const prev = prevAgents.get(agent.id);
           if (!prev?.waitingForHuman) {
-            const shortId = agent.id.slice(0, 8);
-            sendBrowserNotification(`Agent ${shortId} is waiting for your input`);
+            const label = agent.name || agent.id.slice(0, 8);
+            const projectSuffix = agent.project ? ` (${agent.project})` : '';
+            sendBrowserNotification(`${label}${projectSuffix} is waiting for your input`);
           }
         }
       }
@@ -156,10 +169,18 @@ export const useOfficeStore = create<OfficeState>()(
           lastEventAt: event.timestamp,
           stateChangedAt: event.timestamp,
           activityText: null,
+          name: event.name ?? null,
+          roleName: event.roleName ?? null,
           project: event.project ?? null,
           waitingForHuman: false,
+          parentId: null,
+          childIds: [],
         };
         state.addAgent(newAgent);
+        // Initialize history for new agent
+        const nextHistory = new Map(state.agentHistory);
+        nextHistory.set(event.sessionId, [{ state: 'entering', timestamp: event.timestamp }]);
+        set({ agentHistory: nextHistory });
         return;
       }
 
@@ -217,6 +238,21 @@ export const useOfficeStore = create<OfficeState>()(
 
       if (patch.state && patch.state !== existing.state) {
         patch.stateChangedAt = Date.now();
+        // Track state history
+        const history = state.agentHistory.get(existing.id) ?? [];
+        history.push({ state: patch.state, timestamp: Date.now() });
+        const nextHistory = new Map(state.agentHistory);
+        nextHistory.set(existing.id, history);
+        set({ agentHistory: nextHistory });
+      }
+
+      // Track tool counts
+      if (event.type === 'tool' && event.status === 'started') {
+        const counts = state.agentToolCounts.get(existing.id) ?? new Map<string, number>();
+        counts.set(event.tool, (counts.get(event.tool) ?? 0) + 1);
+        const nextCounts = new Map(state.agentToolCounts);
+        nextCounts.set(existing.id, counts);
+        set({ agentToolCounts: nextCounts });
       }
 
       state.updateAgent(existing.id, patch);
@@ -231,6 +267,10 @@ export const useOfficeStore = create<OfficeState>()(
           focusTimer = null;
         }, 2000);
       }
+    },
+
+    selectAgent: (id) => {
+      set({ selectedAgentId: id });
     },
 
     toggleNotifications: () => {

@@ -420,22 +420,22 @@ open http://your-proxmox-host:8780
 ### v2-M2: Context & Relationships — "What project? What team?"
 > Connect agents to their work and to each other.
 
-- [ ] **Project labels** on agents
+- [x] **Project labels** on agents
   - Show project/repo name beneath or beside the sprite (basename from session path)
   - Group agents by project in the HUD roster with collapsible sections
-- [ ] **Agent team visualization**
+- [x] **Agent team visualization**
   - When a parent agent spawns sub-agents via Task, visually connect them
   - Shared desk cluster: parent at one desk, sub-agents at adjacent desks
   - Subtle connecting line or shared highlight color between team members
   - When parent is waiting on sub-agents, show that dependency: `"Waiting on 2 agents"`
-- [ ] **Agent detail panel** (click agent in roster or click sprite)
+- [x] **Agent detail panel** (click agent in roster or click sprite)
   - Expanded card showing: project name, current file/tool, state history timeline, session duration, tools used breakdown, parent/child relationships
   - Styled as a pixel-art dossier/file folder
   - Stays open until dismissed, updates in real-time
-- [ ] **Agent naming**
+- [x] **Agent naming**
   - Auto-assign memorable names (e.g., "Ada", "Grace", "Linus") instead of UUID prefixes
   - Optional custom name override via config
-- [ ] **Session history timeline** in detail panel
+- [x] **Session history timeline** in detail panel
   - Horizontal bar showing state transitions over time
   - Color-coded segments: blue=coding, purple=thinking, green=terminal, yellow=searching, gray=idle, red=error
   - Hover a segment to see what tool/file was active

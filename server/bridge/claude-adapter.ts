@@ -37,6 +37,9 @@ function extractSafeContext(toolName: string, input: Record<string, unknown> | u
   }
 
   if (normalized.includes('task')) {
+    // Prefer the Claude Code-assigned agent name (e.g. "m2-builder")
+    if (typeof input.name === 'string') return input.name;
+    if (typeof input.description === 'string') return input.description;
     return typeof input.subagent_type === 'string' ? input.subagent_type : null;
   }
 
@@ -47,6 +50,7 @@ function assistantEvents(raw: RawJsonlEvent): PixelEvent[] {
   const { sessionId, agentId, timestamp } = getMeta(raw);
   const blocks = raw.message?.content ?? [];
   const events: PixelEvent[] = [];
+  let hasToolUse = false;
 
   for (const block of blocks) {
     const parsed = block as RawContentBlock;
@@ -55,6 +59,7 @@ function assistantEvents(raw: RawJsonlEvent): PixelEvent[] {
     } else if (parsed.type === 'text') {
       events.push(createActivityEvent(sessionId, agentId, timestamp, 'responding'));
     } else if (parsed.type === 'tool_use') {
+      hasToolUse = true;
       const tool = parsed.name ?? 'unknown_tool';
       const context = extractSafeContext(tool, parsed.input);
       events.push(
@@ -66,6 +71,12 @@ function assistantEvents(raw: RawJsonlEvent): PixelEvent[] {
         }),
       );
     }
+  }
+
+  // When the assistant turn ends (stop_reason "end_turn") with no pending
+  // tool calls, Claude is done and waiting for human input.
+  if (!hasToolUse && raw.message?.stop_reason === 'end_turn') {
+    events.push(createActivityEvent(sessionId, agentId, timestamp, 'waiting'));
   }
 
   return events;

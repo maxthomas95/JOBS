@@ -2,6 +2,41 @@ import type { Agent, AgentState } from '../src/types/agent.js';
 import type { PixelEvent } from '../src/types/events.js';
 import { STATIONS, tileToWorld } from '../src/types/agent.js';
 
+const AGENT_NAMES = [
+  'Ada', 'Grace', 'Linus', 'Alan', 'Dijkstra',
+  'Hopper', 'Knuth', 'Babbage', 'Turing', 'Lovelace',
+  'Ritchie', 'Thompson', 'Woz', 'Carmack', 'Norvig',
+  'Liskov', 'Hamilton', 'Hoare', 'Lamport', 'Cerf',
+  'Berners-Lee', 'Torvalds', 'Pike', 'Stroustrup', 'Gosling',
+];
+
+/** Extract project name from Claude's session file path.
+ *  Path format: ~/.claude/projects/{encoded-path}/{uuid}.jsonl
+ *  The encoded-path is URL-encoded and contains the project directory.
+ *  We decode it and return the last segment as the project name. */
+function extractProjectName(filePath: string): string | null {
+  // Normalize to forward slashes
+  const normalized = filePath.replace(/\\/g, '/');
+  // Match .claude/projects/{encoded-path}/{uuid}.jsonl
+  const match = normalized.match(/\.claude\/projects\/([^/]+)\//);
+  if (match) {
+    try {
+      const decoded = decodeURIComponent(match[1]);
+      // decoded is an absolute path like /home/user/my-project or C:\repo\jobs
+      const segments = decoded.replace(/\\/g, '/').split('/').filter(Boolean);
+      return segments[segments.length - 1] || null;
+    } catch {
+      // Fallback if decoding fails
+    }
+  }
+  // Fallback: use basename of the path minus extension
+  const basename = normalized.split('/').pop();
+  if (basename) {
+    return basename.replace(/\.jsonl$/, '');
+  }
+  return null;
+}
+
 interface ServerAgent extends Agent {
   filePath?: string;
   lastEventType?: string;
@@ -32,16 +67,28 @@ function classifyTool(toolName: string): ToolClassification {
   return 'coding';
 }
 
+/** Tracks an agent that recently used the Task tool and may spawn a child */
+interface PendingSpawn {
+  parentId: string;
+  timestamp: number;
+  /** The Claude Code-assigned name for the spawned agent (e.g. "m2-builder") */
+  childName: string | null;
+}
+
 export class SessionManager {
   private readonly agents = new Map<string, ServerAgent>();
   private readonly deskAssignments: Array<string | null> = new Array<string | null>(10).fill(null);
   private nextCharacterIndex = 0;
+  private nextNameIndex = 0;
+  private readonly assignedNames = new Set<string>();
+  private readonly pendingSpawns: PendingSpawn[] = [];
+  private readonly spawnWindowMs = 10000;
   private readonly staleIdleMs: number;
   private readonly staleEvictMs: number;
-  private readonly waitingThresholdMs = 60000;
+  private readonly waitingThresholdMs = 5000;
   private onSnapshotNeeded: (() => void) | null = null;
 
-  constructor(staleIdleMs = Number(process.env.STALE_IDLE_MS ?? 300000), staleEvictMs = Number(process.env.STALE_EVICT_MS ?? 900000)) {
+  constructor(staleIdleMs = Number(process.env.STALE_IDLE_MS ?? 60000), staleEvictMs = Number(process.env.STALE_EVICT_MS ?? 180000)) {
     this.staleIdleMs = staleIdleMs;
     this.staleEvictMs = staleEvictMs;
     this.startGhostTimer();
@@ -63,6 +110,10 @@ export class SessionManager {
     const deskIndex = this.reserveDesk(sessionId);
     const door = tileToWorld(STATIONS.door);
     const target = deskIndex === null ? door : tileToWorld(STATIONS.desks[deskIndex]);
+    const name = this.assignName();
+
+    // Check for pending parent spawn
+    const pendingSpawn = this.matchPendingSpawn();
 
     const agent: ServerAgent = {
       id: sessionId,
@@ -75,10 +126,23 @@ export class SessionManager {
       lastEventAt: Date.now(),
       stateChangedAt: Date.now(),
       activityText: null,
-      project: filePath.split(/[\\/]/).pop() ?? null,
+      name,
+      roleName: pendingSpawn?.childName ?? null,
+      project: extractProjectName(filePath),
       waitingForHuman: false,
+      parentId: pendingSpawn?.parentId ?? null,
+      childIds: [],
       filePath,
     };
+
+    // Link parent to child
+    const parentId = pendingSpawn?.parentId ?? null;
+    if (parentId) {
+      const parent = this.agents.get(parentId);
+      if (parent) {
+        parent.childIds = [...parent.childIds, sessionId];
+      }
+    }
 
     this.nextCharacterIndex += 1;
     this.agents.set(sessionId, agent);
@@ -96,8 +160,9 @@ export class SessionManager {
     }
 
     agent.lastEventAt = event.timestamp || Date.now();
-    // Clear waiting-for-human on any new event
-    if (agent.waitingForHuman) {
+    // Clear waiting-for-human on any event that isn't itself a waiting signal
+    const isWaitingEvent = event.type === 'activity' && event.action === 'waiting';
+    if (agent.waitingForHuman && !isWaitingEvent) {
       agent.waitingForHuman = false;
     }
     const desk = agent.deskIndex === null ? STATIONS.whiteboard : STATIONS.desks[agent.deskIndex];
@@ -108,11 +173,17 @@ export class SessionManager {
         // Enrich session event with agent metadata for client-side instant accuracy
         event.characterIndex = agent.characterIndex;
         event.deskIndex = agent.deskIndex;
+        event.name = agent.name ?? undefined;
+        event.roleName = agent.roleName ?? undefined;
+        event.project = agent.project ?? undefined;
         this.applyState(agent, 'entering', agent.deskIndex === null ? STATIONS.door : STATIONS.desks[agent.deskIndex], null);
       } else if (event.action === 'ended') {
         this.applyState(agent, 'leaving', STATIONS.door, null);
         this.releaseDesk(sessionId);
         setTimeout(() => {
+          if (agent.name) {
+            this.assignedNames.delete(agent.name);
+          }
           this.agents.delete(sessionId);
         }, 2000);
       }
@@ -127,6 +198,7 @@ export class SessionManager {
         this.applyState(agent, 'coding', desk, 'Writing code...');
       } else if (event.action === 'waiting') {
         this.applyState(agent, 'waiting', STATIONS.coffee, 'Waiting...');
+        agent.waitingForHuman = true;
       } else if (event.action === 'user_prompt') {
         // user_prompt: don't change state/location, just clear activityText
         agent.activityText = null;
@@ -138,6 +210,10 @@ export class SessionManager {
       agent.lastEventType = `tool.${event.tool}`;
       const context = event.context ?? null;
       const mode = classifyTool(event.tool);
+      // Record potential child spawn with the agent name from context
+      if (mode === 'delegating') {
+        this.pendingSpawns.push({ parentId: sessionId, timestamp: Date.now(), childName: context });
+      }
       if (mode === 'terminal') {
         this.applyState(agent, 'terminal', STATIONS.terminal, context);
       } else if (mode === 'searching') {
@@ -169,6 +245,10 @@ export class SessionManager {
   }
 
   removeSession(sessionId: string): void {
+    const agent = this.agents.get(sessionId);
+    if (agent?.name) {
+      this.assignedNames.delete(agent.name);
+    }
     this.releaseDesk(sessionId);
     this.agents.delete(sessionId);
   }
@@ -179,6 +259,37 @@ export class SessionManager {
       position: { ...agent.position },
       targetPosition: agent.targetPosition ? { ...agent.targetPosition } : null,
     }));
+  }
+
+  private matchPendingSpawn(): PendingSpawn | null {
+    const now = Date.now();
+    // Remove stale entries
+    while (this.pendingSpawns.length > 0 && now - this.pendingSpawns[0].timestamp > this.spawnWindowMs) {
+      this.pendingSpawns.shift();
+    }
+    // Match the oldest pending spawn
+    if (this.pendingSpawns.length > 0) {
+      return this.pendingSpawns.shift()!;
+    }
+    return null;
+  }
+
+  private assignName(): string {
+    // Try sequential first
+    for (let i = 0; i < AGENT_NAMES.length; i++) {
+      const idx = (this.nextNameIndex + i) % AGENT_NAMES.length;
+      const candidate = AGENT_NAMES[idx];
+      if (!this.assignedNames.has(candidate)) {
+        this.assignedNames.add(candidate);
+        this.nextNameIndex = (idx + 1) % AGENT_NAMES.length;
+        return candidate;
+      }
+    }
+    // All names exhausted — generate numbered name
+    const fallback = `Agent-${this.nextNameIndex}`;
+    this.nextNameIndex += 1;
+    this.assignedNames.add(fallback);
+    return fallback;
   }
 
   private applyState(agent: ServerAgent, state: AgentState, target: { x: number; y: number }, activityText: string | null): void {
@@ -206,20 +317,33 @@ export class SessionManager {
     }
   }
 
+
   private startGhostTimer(): void {
     setInterval(() => {
       const now = Date.now();
+      let changed = false;
       for (const [sessionId, agent] of this.agents.entries()) {
         const age = now - agent.lastEventAt;
-        if (age > this.staleEvictMs) {
+        if (age > this.staleEvictMs && agent.state !== 'leaving') {
           agent.state = 'leaving';
           agent.targetPosition = tileToWorld(STATIONS.door);
-          this.removeSession(sessionId);
-        } else if (age > this.staleIdleMs) {
+          agent.stateChangedAt = now;
+          changed = true;
+          // Delay removal to allow leaving animation on client
+          setTimeout(() => {
+            this.removeSession(sessionId);
+            if (this.onSnapshotNeeded) this.onSnapshotNeeded();
+          }, 3000);
+        } else if (age > this.staleIdleMs && agent.state !== 'idle' && agent.state !== 'leaving') {
           agent.state = 'idle';
+          agent.stateChangedAt = now;
+          changed = true;
         }
       }
-    }, 30000).unref();
+      if (changed && this.onSnapshotNeeded) {
+        this.onSnapshotNeeded();
+      }
+    }, 10000).unref();
   }
 
   private startWaitingDetector(): void {
@@ -227,9 +351,12 @@ export class SessionManager {
       const now = Date.now();
       let changed = false;
       for (const agent of this.agents.values()) {
-        const isWaitingEvent = agent.lastEventType === 'activity.waiting';
+        if (agent.waitingForHuman) continue;
         const elapsed = now - agent.lastEventAt;
-        if (isWaitingEvent && elapsed > this.waitingThresholdMs && !agent.waitingForHuman) {
+
+        // Mid-turn waiting: explicit activity.waiting event (tool approval)
+        const isWaitingEvent = agent.lastEventType === 'activity.waiting';
+        if (isWaitingEvent && elapsed > this.waitingThresholdMs) {
           agent.waitingForHuman = true;
           changed = true;
         }

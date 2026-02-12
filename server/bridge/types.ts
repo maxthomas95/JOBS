@@ -12,6 +12,7 @@ export interface RawContentBlock {
 export interface RawMessage {
   role?: string;
   content?: RawContentBlock[];
+  stop_reason?: string | null;
 }
 
 export interface RawJsonlEvent {
@@ -23,6 +24,10 @@ export interface RawJsonlEvent {
   toolName?: string;
   isError?: boolean;
   input?: Record<string, unknown>;
+  /** Present on 'result' type events — indicates why the turn ended */
+  stop_reason?: string;
+  /** Some result events nest stop_reason inside a result object */
+  result?: { stop_reason?: string };
 }
 
 export interface WatchSessionPayload {

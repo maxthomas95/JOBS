@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { useOfficeStore } from '../state/useOfficeStore.js';
 import { spritePositions } from '../engine/AgentSprite.js';
 import type { AgentState } from '../types/agent.js';
@@ -15,6 +15,25 @@ const STATE_COLORS: Record<string, string> = {
   delegating: '#ce93d8',
 };
 
+function formatElapsed(ms: number): string {
+  const totalSec = Math.floor(ms / 1000);
+  if (totalSec < 60) return `${totalSec}s`;
+  const min = Math.floor(totalSec / 60);
+  const sec = totalSec % 60;
+  if (min < 60) return `${min}m ${sec.toString().padStart(2, '0')}s`;
+  const hr = Math.floor(min / 60);
+  const remMin = min % 60;
+  return `${hr}h ${remMin.toString().padStart(2, '0')}m`;
+}
+
+function getTimeColor(ms: number, state: AgentState): string {
+  const isIdleOrWaiting = state === 'waiting' || state === 'idle' || state === 'cooling';
+  if (ms > 5 * 60 * 1000 && isIdleOrWaiting) return '#ff4444'; // red: >5min idle/waiting
+  if (ms > 5 * 60 * 1000) return '#ffa726'; // orange: >5min active
+  if (ms > 60 * 1000) return '#ffeb3b'; // yellow: 1-5min
+  return '#31e678'; // green: <1min
+}
+
 function getBubbleStyle(state: AgentState, waitingForHuman: boolean) {
   if (waitingForHuman) {
     return { background: '#ffeb3b', color: '#000' };
@@ -27,6 +46,13 @@ function getBubbleStyle(state: AgentState, waitingForHuman: boolean) {
 export function BubbleOverlay({ canvasRef }: { canvasRef: React.RefObject<HTMLCanvasElement | null> }) {
   const agents = useOfficeStore((s) => s.agents);
   const overlayRef = useRef<HTMLDivElement>(null);
+  const [now, setNow] = useState(Date.now());
+
+  // Tick every second to update elapsed time displays
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
 
   useEffect(() => {
     let frameId: number;
@@ -48,8 +74,9 @@ export function BubbleOverlay({ canvasRef }: { canvasRef: React.RefObject<HTMLCa
           if (!id) continue;
           const pos = spritePositions.get(id);
           if (pos) {
+            const yOffset = Number(el.dataset.offsetY ?? -20);
             el.style.left = `${offsetX + pos.x * scaleX}px`;
-            el.style.top = `${offsetY + (pos.y - 20) * scaleY}px`;
+            el.style.top = `${offsetY + (pos.y + yOffset) * scaleY}px`;
           }
         }
       }
@@ -73,19 +100,40 @@ export function BubbleOverlay({ canvasRef }: { canvasRef: React.RefObject<HTMLCa
             ? agent.activityText.slice(0, 24) + '\u2026'
             : agent.activityText;
         }
-        if (!text) return null;
 
+        const elapsed = now - agent.stateChangedAt;
+        const showTimer = elapsed >= 10_000 && agent.state !== 'entering' && agent.state !== 'leaving';
         const style = getBubbleStyle(agent.state, agent.waitingForHuman);
+        const nameLabel = agent.name || agent.id.slice(0, 6);
 
         return (
-          <div
-            key={agent.id}
-            data-agent-id={agent.id}
-            className="speech-bubble"
-            style={{ background: style.background, color: style.color }}
-          >
-            {text}
-          </div>
+          <Fragment key={agent.id}>
+            {(text || showTimer) ? (
+              <div
+                data-agent-id={agent.id}
+                data-offset-y="-20"
+                className="speech-bubble"
+                style={{ background: style.background, color: style.color }}
+              >
+                {text && <div>{text}</div>}
+                {showTimer && (
+                  <div
+                    className="time-indicator"
+                    style={{ color: getTimeColor(elapsed, agent.state) }}
+                  >
+                    {formatElapsed(elapsed)}
+                  </div>
+                )}
+              </div>
+            ) : null}
+            <div
+              data-agent-id={agent.id}
+              data-offset-y="16"
+              className="sprite-label"
+            >
+              {nameLabel}
+            </div>
+          </Fragment>
         );
       })}
     </div>
