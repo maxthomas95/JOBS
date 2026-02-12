@@ -482,7 +482,6 @@ open http://your-proxmox-host:8780
 - [x] **Screen glow** on active desks — monitors emit subtle animated light when agent is coding
 - [x] **Clock** showing real time on the office wall
 - [x] **Steam/particles** from coffee machine when in use
-- [ ] **Day/night cycle** — office lighting shifts based on real time of day
 - **Deliverable:** Put it on a monitor, leave it running, it's beautiful
 
 ### v2-M4.5: Audio Polish — "Make it sound right"
@@ -513,7 +512,6 @@ open http://your-proxmox-host:8780
 - [x] **Add .ogg files** to `src/assets/audio/` (14 files, ~2MB total, bundled by Vite)
 - [x] **Tune volumes and timing** — per-sound volume config, 10s footstep cutoff
 - [x] **Move one-shot triggers to AnimationController** — fires on state transitions (works with both events and snapshots)
-- [ ] **Day/night cycle** — office lighting shifts based on real time of day
 - **Deliverable:** Sounds you'd actually want to leave on
 
 ### v2-M5: Visual Upgrade — "Make it gorgeous"
@@ -527,6 +525,7 @@ open http://your-proxmox-host:8780
   - More than 8 characters, diverse appearances
   - Richer animation states (sitting, typing, standing, walking, gesturing)
   - Idle animations per station (not just direction + bob)
+- [ ] **Day/night cycle** — office lighting shifts based on real time of day
 - [ ] **Customizable office layouts** — JSON-driven tileset config
   - Users can rearrange desks, add rooms, resize office
   - Preset layouts: startup (open plan), corporate (cubicles), cozy (small team)
