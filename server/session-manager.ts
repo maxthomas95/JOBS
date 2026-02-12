@@ -85,7 +85,7 @@ export class SessionManager {
   private readonly spawnWindowMs = 10000;
   private readonly staleIdleMs: number;
   private readonly staleEvictMs: number;
-  private readonly waitingThresholdMs = 5000;
+  private readonly waitingThresholdMs = 8000;
   private onSnapshotNeeded: (() => void) | null = null;
 
   constructor(staleIdleMs = Number(process.env.STALE_IDLE_MS ?? 60000), staleEvictMs = Number(process.env.STALE_EVICT_MS ?? 180000)) {
@@ -160,9 +160,8 @@ export class SessionManager {
     }
 
     agent.lastEventAt = event.timestamp || Date.now();
-    // Clear waiting-for-human on any event that isn't itself a waiting signal
-    const isWaitingEvent = event.type === 'activity' && event.action === 'waiting';
-    if (agent.waitingForHuman && !isWaitingEvent) {
+    // Clear waiting-for-human on any new event (agent is active again)
+    if (agent.waitingForHuman) {
       agent.waitingForHuman = false;
     }
     const desk = agent.deskIndex === null ? STATIONS.whiteboard : STATIONS.desks[agent.deskIndex];
@@ -352,18 +351,22 @@ export class SessionManager {
       let changed = false;
       for (const agent of this.agents.values()) {
         if (agent.waitingForHuman) continue;
+        if (agent.state === 'leaving' || agent.state === 'entering') continue;
         const elapsed = now - agent.lastEventAt;
 
-        // Mid-turn waiting: explicit activity.waiting event (tool approval)
-        const isWaitingEvent = agent.lastEventType === 'activity.waiting';
-        if (isWaitingEvent && elapsed > this.waitingThresholdMs) {
+        // When the last event was a text response and silence has lasted 8+ seconds,
+        // the turn is over — Claude wrote its final text and is waiting for human input.
+        // This avoids false positives because tool_use and thinking events set different lastEventType values.
+        const isTextResponse = agent.lastEventType === 'activity.responding';
+        if (isTextResponse && elapsed > this.waitingThresholdMs) {
           agent.waitingForHuman = true;
+          this.applyState(agent, 'waiting', STATIONS.coffee, 'Waiting...');
           changed = true;
         }
       }
       if (changed && this.onSnapshotNeeded) {
         this.onSnapshotNeeded();
       }
-    }, 5000).unref();
+    }, 3000).unref();
   }
 }
