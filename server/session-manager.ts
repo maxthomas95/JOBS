@@ -40,6 +40,8 @@ function extractProjectName(filePath: string): string | null {
 interface ServerAgent extends Agent {
   filePath?: string;
   lastEventType?: string;
+  /** Timestamp when the agent entered waitingForHuman — used for dedicated eviction */
+  waitingSince?: number;
 }
 
 type ToolClassification = 'terminal' | 'searching' | 'reading' | 'coding' | 'delegating' | 'thinking';
@@ -86,11 +88,13 @@ export class SessionManager {
   private readonly staleIdleMs: number;
   private readonly staleEvictMs: number;
   private readonly waitingThresholdMs = 8000;
+  private readonly waitingEvictMs: number;
   private onSnapshotNeeded: (() => void) | null = null;
 
   constructor(staleIdleMs = Number(process.env.STALE_IDLE_MS ?? 60000), staleEvictMs = Number(process.env.STALE_EVICT_MS ?? 180000)) {
     this.staleIdleMs = staleIdleMs;
     this.staleEvictMs = staleEvictMs;
+    this.waitingEvictMs = Number(process.env.WAITING_EVICT_MS ?? 60000);
     this.startGhostTimer();
     this.startWaitingDetector();
   }
@@ -166,6 +170,7 @@ export class SessionManager {
     // Clear waiting-for-human on any new event (agent is active again)
     if (agent.waitingForHuman) {
       agent.waitingForHuman = false;
+      agent.waitingSince = undefined;
     }
     const desk = agent.deskIndex === null ? STATIONS.whiteboard : STATIONS.desks[agent.deskIndex];
 
@@ -206,6 +211,7 @@ export class SessionManager {
       } else if (event.action === 'waiting') {
         this.applyState(agent, 'waiting', STATIONS.coffee, 'Waiting...');
         agent.waitingForHuman = true;
+        agent.waitingSince = Date.now();
       } else if (event.action === 'user_prompt') {
         // Human sent a message — Claude will start processing immediately.
         // Transition to thinking since the JSONL won't write the thinking
@@ -376,9 +382,25 @@ export class SessionManager {
     setInterval(() => {
       const now = Date.now();
       let changed = false;
-      for (const agent of this.agents.values()) {
-        if (agent.waitingForHuman) continue;
+      for (const [sessionId, agent] of this.agents.entries()) {
         if (agent.state === 'leaving' || agent.state === 'entering') continue;
+
+        // Evict agents that have been waiting too long (dedicated waiting timeout)
+        if (agent.waitingForHuman && agent.waitingSince) {
+          const waitingAge = now - agent.waitingSince;
+          if (waitingAge > this.waitingEvictMs) {
+            agent.state = 'leaving';
+            agent.targetPosition = tileToWorld(STATIONS.door);
+            agent.stateChangedAt = now;
+            changed = true;
+            setTimeout(() => {
+              this.removeSession(sessionId);
+              if (this.onSnapshotNeeded) this.onSnapshotNeeded();
+            }, 3000);
+          }
+          continue;
+        }
+
         const elapsed = now - agent.lastEventAt;
 
         // When the last event was a text response and silence has lasted 8+ seconds,
@@ -387,6 +409,7 @@ export class SessionManager {
         const isTextResponse = agent.lastEventType === 'activity.responding';
         if (isTextResponse && elapsed > this.waitingThresholdMs) {
           agent.waitingForHuman = true;
+          agent.waitingSince = now;
           this.applyState(agent, 'waiting', STATIONS.coffee, 'Waiting...');
           changed = true;
         }
