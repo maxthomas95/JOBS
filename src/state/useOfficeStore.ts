@@ -12,6 +12,7 @@ export interface StateEntry {
 interface OfficeState {
   agents: Map<string, Agent>;
   focusedAgentId: string | null;
+  focusedAgentIds: Set<string>;
   selectedAgentId: string | null;
   notificationsEnabled: boolean;
   agentHistory: Map<string, StateEntry[]>;
@@ -26,6 +27,7 @@ interface OfficeState {
   handleSnapshot: (agents: Agent[]) => void;
   handleEvent: (event: PixelEvent) => void;
   focusAgent: (id: string | null) => void;
+  focusTeam: (supervisorId: string) => void;
   selectAgent: (id: string | null) => void;
   toggleNotifications: () => void;
 }
@@ -102,6 +104,7 @@ export const useOfficeStore = create<OfficeState>()(
     subscribeWithSelector((set, get) => ({
     agents: new Map<string, Agent>(),
     focusedAgentId: null,
+    focusedAgentIds: new Set<string>(),
     selectedAgentId: null,
     notificationsEnabled: false,
     agentHistory: new Map<string, StateEntry[]>(),
@@ -144,11 +147,18 @@ export const useOfficeStore = create<OfficeState>()(
       const state = get();
       const prevAgents = state.agents;
       const map = new Map<string, Agent>();
+      const nextHistory = new Map(state.agentHistory);
       for (const agent of agents) {
         map.set(agent.id, agent);
+        const prev = prevAgents.get(agent.id);
+        // Record state change in history when snapshot introduces a new state
+        if (prev && agent.state !== prev.state) {
+          const history = nextHistory.get(agent.id) ?? [];
+          history.push({ state: agent.state, timestamp: Date.now() });
+          nextHistory.set(agent.id, history);
+        }
         // Notify if agent just became waiting-for-human
         if (agent.waitingForHuman && state.notificationsEnabled) {
-          const prev = prevAgents.get(agent.id);
           if (!prev?.waitingForHuman) {
             const label = agent.name || agent.id.slice(0, 8);
             const projectSuffix = agent.project ? ` (${agent.project})` : '';
@@ -156,7 +166,7 @@ export const useOfficeStore = create<OfficeState>()(
           }
         }
       }
-      set({ agents: map });
+      set({ agents: map, agentHistory: nextHistory });
     },
 
     handleEvent: (event) => {
@@ -164,6 +174,7 @@ export const useOfficeStore = create<OfficeState>()(
       const existing = state.agents.get(event.sessionId);
 
       if (!existing && event.type === 'session' && event.action === 'started') {
+        const parentId = event.parentId ?? null;
         const newAgent: Agent = {
           id: event.sessionId,
           sessionId: event.sessionId,
@@ -179,10 +190,19 @@ export const useOfficeStore = create<OfficeState>()(
           roleName: event.roleName ?? null,
           project: event.project ?? null,
           waitingForHuman: false,
-          parentId: null,
+          parentId,
           childIds: [],
         };
         state.addAgent(newAgent);
+        // Link child to parent's childIds
+        if (parentId) {
+          const parent = state.agents.get(parentId);
+          if (parent && !parent.childIds.includes(event.sessionId)) {
+            state.updateAgent(parentId, {
+              childIds: [...parent.childIds, event.sessionId],
+            });
+          }
+        }
         // Initialize history for new agent
         const nextHistory = new Map(state.agentHistory);
         nextHistory.set(event.sessionId, [{ state: 'entering', timestamp: event.timestamp }]);
@@ -289,13 +309,28 @@ export const useOfficeStore = create<OfficeState>()(
 
     focusAgent: (id) => {
       if (focusTimer) clearTimeout(focusTimer);
-      set({ focusedAgentId: id });
+      set({ focusedAgentId: id, focusedAgentIds: new Set<string>() });
       if (id) {
         focusTimer = setTimeout(() => {
           set({ focusedAgentId: null });
           focusTimer = null;
         }, 2000);
       }
+    },
+
+    focusTeam: (supervisorId) => {
+      if (focusTimer) clearTimeout(focusTimer);
+      const state = get();
+      const supervisor = state.agents.get(supervisorId);
+      const activeChildIds = supervisor
+        ? supervisor.childIds.filter((cid) => state.agents.has(cid))
+        : [];
+      const ids = new Set([supervisorId, ...activeChildIds]);
+      set({ focusedAgentId: supervisorId, focusedAgentIds: ids });
+      focusTimer = setTimeout(() => {
+        set({ focusedAgentId: null, focusedAgentIds: new Set<string>() });
+        focusTimer = null;
+      }, 2000);
     },
 
     selectAgent: (id) => {

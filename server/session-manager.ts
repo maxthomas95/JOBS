@@ -107,13 +107,16 @@ export class SessionManager {
       return existing;
     }
 
-    const deskIndex = this.reserveDesk(sessionId);
     const door = tileToWorld(STATIONS.door);
-    const target = deskIndex === null ? door : tileToWorld(STATIONS.desks[deskIndex]);
     const name = this.assignName();
 
     // Check for pending parent spawn
     const pendingSpawn = this.matchPendingSpawn();
+
+    // Reserve desk — prefer adjacent to parent if this is a sub-agent
+    const parentAgent = pendingSpawn?.parentId ? this.agents.get(pendingSpawn.parentId) : null;
+    const deskIndex = this.reserveDesk(sessionId, parentAgent?.deskIndex ?? null);
+    const target = deskIndex === null ? door : tileToWorld(STATIONS.desks[deskIndex]);
 
     const agent: ServerAgent = {
       id: sessionId,
@@ -175,7 +178,12 @@ export class SessionManager {
         event.name = agent.name ?? undefined;
         event.roleName = agent.roleName ?? undefined;
         event.project = agent.project ?? undefined;
+        event.parentId = agent.parentId ?? undefined;
         this.applyState(agent, 'entering', agent.deskIndex === null ? STATIONS.door : STATIONS.desks[agent.deskIndex], null);
+        // Broadcast snapshot so all clients get parent's updated childIds
+        if (agent.parentId && this.onSnapshotNeeded) {
+          this.onSnapshotNeeded();
+        }
       } else if (event.action === 'ended') {
         this.applyState(agent, 'leaving', STATIONS.door, null);
         this.releaseDesk(sessionId);
@@ -303,7 +311,21 @@ export class SessionManager {
     agent.activityText = activityText;
   }
 
-  private reserveDesk(sessionId: string): number | null {
+  private reserveDesk(sessionId: string, parentDeskIndex: number | null): number | null {
+    // If this is a sub-agent, prefer a desk adjacent to the parent
+    if (parentDeskIndex !== null) {
+      // Try adjacent desks in priority order:
+      // ±1 = same row neighbor, ±5 = same column (row above/below)
+      const offsets = [1, -1, 5, -5, 2, -2, 6, -6, 4, -4];
+      for (const offset of offsets) {
+        const candidate = parentDeskIndex + offset;
+        if (candidate >= 0 && candidate < this.deskAssignments.length && this.deskAssignments[candidate] === null) {
+          this.deskAssignments[candidate] = sessionId;
+          return candidate;
+        }
+      }
+    }
+    // Fallback: first available desk (FIFO)
     for (let i = 0; i < this.deskAssignments.length; i += 1) {
       if (this.deskAssignments[i] === null) {
         this.deskAssignments[i] = sessionId;

@@ -73,8 +73,13 @@ function truncate(text: string, max: number): string {
   return text.length > max ? text.slice(0, max) + '...' : text;
 }
 
-/** Group agents by project, sorting waiting-for-human to top within each group */
-function groupByProject(agents: Agent[]): Map<string, Agent[]> {
+/** Check if agent is a supervisor with active children */
+function isSupervisor(agent: Agent, agentMap: Map<string, Agent>): boolean {
+  return agent.childIds.filter((id) => agentMap.has(id)).length > 0;
+}
+
+/** Group agents by project, nesting teams: supervisors first with children below, then standalone */
+function groupByProject(agents: Agent[], agentMap: Map<string, Agent>): Map<string, Agent[]> {
   const groups = new Map<string, Agent[]>();
   for (const agent of agents) {
     const key = agent.project || 'Unknown';
@@ -85,9 +90,40 @@ function groupByProject(agents: Agent[]): Map<string, Agent[]> {
       groups.set(key, [agent]);
     }
   }
-  // Sort agents within each group: waiting first
-  for (const list of groups.values()) {
-    list.sort((a, b) => (a.waitingForHuman === b.waitingForHuman ? 0 : a.waitingForHuman ? -1 : 1));
+  // Reorder: [supervisor1, ...children1, supervisor2, ...children2, ...standalone]
+  for (const [key, list] of groups.entries()) {
+    const supervisors: Agent[] = [];
+    const childrenByParent = new Map<string, Agent[]>();
+    const standalone: Agent[] = [];
+
+    for (const agent of list) {
+      if (isSupervisor(agent, agentMap)) {
+        supervisors.push(agent);
+      } else if (agent.parentId && agentMap.has(agent.parentId)) {
+        // Active child — will be nested under parent
+        const siblings = childrenByParent.get(agent.parentId) ?? [];
+        siblings.push(agent);
+        childrenByParent.set(agent.parentId, siblings);
+      } else {
+        standalone.push(agent);
+      }
+    }
+
+    // Sort within sub-groups: waiting-for-human first
+    const waitingFirst = (a: Agent, b: Agent) =>
+      a.waitingForHuman === b.waitingForHuman ? 0 : a.waitingForHuman ? -1 : 1;
+    supervisors.sort(waitingFirst);
+    standalone.sort(waitingFirst);
+
+    const ordered: Agent[] = [];
+    for (const sup of supervisors) {
+      ordered.push(sup);
+      const children = childrenByParent.get(sup.id) ?? [];
+      children.sort(waitingFirst);
+      ordered.push(...children);
+    }
+    ordered.push(...standalone);
+    groups.set(key, ordered);
   }
   return groups;
 }
@@ -95,13 +131,14 @@ function groupByProject(agents: Agent[]): Map<string, Agent[]> {
 export function HUD() {
   const agents = useOfficeStore((state) => state.agents);
   const focusAgent = useOfficeStore((state) => state.focusAgent);
+  const focusTeam = useOfficeStore((state) => state.focusTeam);
   const selectAgent = useOfficeStore((state) => state.selectAgent);
   const notificationsEnabled = useOfficeStore((state) => state.notificationsEnabled);
   const toggleNotifications = useOfficeStore((state) => state.toggleNotifications);
   const events = useEventStore((state) => state.events);
   const count = agents.size;
   const allAgents = Array.from(agents.values()).slice(0, 10);
-  const projectGroups = groupByProject(allAgents);
+  const projectGroups = groupByProject(allAgents, agents);
   const multipleProjects = projectGroups.size > 1;
   const recentEvents = events.slice(0, 5);
 
@@ -129,14 +166,28 @@ export function HUD() {
     const isChild = !!agent.parentId;
     const parentName = isChild ? (agents.get(agent.parentId!)?.name || agent.parentId!.slice(0, 6)) : null;
     const activeChildren = agent.childIds.filter((id) => agents.has(id)).length;
+    const supervisor = isSupervisor(agent, agents);
+    const rowClasses = `agent-row${isChild ? ' agent-child' : ''}${supervisor ? ' supervisor' : ''}`;
+
+    const handleClick = () => {
+      if (supervisor) {
+        focusTeam(agent.id);
+      } else {
+        focusAgent(agent.id);
+      }
+      selectAgent(agent.id);
+    };
 
     return (
-      <div key={agent.id} className={`agent-row${isChild ? ' agent-child' : ''}`} onClick={() => { focusAgent(agent.id); selectAgent(agent.id); }}>
+      <div key={agent.id} className={rowClasses} onClick={handleClick}>
         <span
           className="agent-dot"
           style={{ background: CHARACTER_COLORS[agent.characterIndex % 8] }}
         />
         <span className="agent-name">{agent.name || agent.id.slice(0, 8)}</span>
+        {supervisor ? (
+          <span className="supervisor-badge">LEAD</span>
+        ) : null}
         {isChild ? (
           <span className="agent-parent-tag">{parentName}</span>
         ) : null}
@@ -144,8 +195,8 @@ export function HUD() {
         {agent.activityText ? (
           <span className="agent-activity">{truncate(agent.activityText, 20)}</span>
         ) : null}
-        {activeChildren > 0 ? (
-          <span className="child-count">{activeChildren} sub</span>
+        {supervisor ? (
+          <span className="team-progress">{activeChildren}/{agent.childIds.length} active</span>
         ) : null}
         {agent.waitingForHuman ? (
           <span className="waiting-badge">NEEDS INPUT</span>

@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
 import { useOfficeStore } from '../state/useOfficeStore.js';
-import { spritePositions } from '../engine/AgentSprite.js';
-import type { AgentState } from '../types/agent.js';
+import { spritePositions, supervisorCheckIns } from '../engine/AgentSprite.js';
+import type { Agent, AgentState } from '../types/agent.js';
 
 const STATE_COLORS: Record<string, string> = {
   thinking: '#7c4dff',
@@ -43,16 +43,69 @@ function getBubbleStyle(state: AgentState, waitingForHuman: boolean) {
   return { background: bg, color: dark ? '#000' : '#fff' };
 }
 
+const TEAM_PASSIVE_STATES = new Set<AgentState>(['cooling', 'idle', 'waiting', 'delegating']);
+const RESULT_FLASH_DURATION = 3000; // ms
+
+/** Track child departures to show "Result from X!" flash */
+interface ResultFlash {
+  childName: string;
+  expiresAt: number;
+}
+
+function getActiveChildCount(agent: Agent, allAgents: Map<string, Agent>): number {
+  return agent.childIds.filter((cid) => allAgents.has(cid)).length;
+}
+
 export function BubbleOverlay({ canvasRef }: { canvasRef: React.RefObject<HTMLCanvasElement | null> }) {
   const agents = useOfficeStore((s) => s.agents);
   const overlayRef = useRef<HTMLDivElement>(null);
   const [now, setNow] = useState(Date.now());
+  // Track result flashes per supervisor agent ID
+  const resultFlashesRef = useRef<Map<string, ResultFlash>>(new Map());
+  // Track previous child sets to detect departures
+  const prevChildSetsRef = useRef<Map<string, Set<string>>>(new Map());
 
   // Tick every second to update elapsed time displays
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
   }, []);
+
+  // Detect child session departures to trigger "Result from X!" flashes
+  useEffect(() => {
+    const currentTime = Date.now();
+    const prevSets = prevChildSetsRef.current;
+    const flashes = resultFlashesRef.current;
+
+    for (const [agentId, agent] of agents.entries()) {
+      if (agent.childIds.length === 0 && !prevSets.has(agentId)) continue;
+      const currentChildren = new Set(agent.childIds.filter((cid) => agents.has(cid)));
+      const prevChildren = prevSets.get(agentId);
+
+      if (prevChildren) {
+        // Check for children that disappeared (session ended)
+        for (const prevChildId of prevChildren) {
+          if (!currentChildren.has(prevChildId)) {
+            // Child departed — create flash
+            const childAgent = agents.get(prevChildId);
+            const childName = childAgent?.name ?? childAgent?.roleName ?? prevChildId.slice(0, 6);
+            flashes.set(agentId, {
+              childName,
+              expiresAt: currentTime + RESULT_FLASH_DURATION,
+            });
+          }
+        }
+      }
+      prevSets.set(agentId, currentChildren);
+    }
+
+    // Clean up flashes that expired
+    for (const [agentId, flash] of flashes.entries()) {
+      if (flash.expiresAt <= currentTime) {
+        flashes.delete(agentId);
+      }
+    }
+  }, [agents, now]);
 
   useEffect(() => {
     let frameId: number;
@@ -101,9 +154,26 @@ export function BubbleOverlay({ canvasRef }: { canvasRef: React.RefObject<HTMLCa
             : agent.activityText;
         }
 
+        // --- Waiting-on-team bubble override ---
+        const activeChildCount = getActiveChildCount(agent, agents);
+        const isSupervisorWaiting = activeChildCount > 0 && TEAM_PASSIVE_STATES.has(agent.state);
+        const resultFlash = resultFlashesRef.current.get(agent.id);
+        const hasResultFlash = resultFlash && resultFlash.expiresAt > now;
+
+        if (hasResultFlash) {
+          text = `Result from ${resultFlash.childName}!`;
+        } else if (isSupervisorWaiting && !agent.waitingForHuman) {
+          text = activeChildCount === 1
+            ? 'Waiting on 1 agent'
+            : `Waiting on ${activeChildCount} agents`;
+        }
+
         const elapsed = now - agent.stateChangedAt;
         const showTimer = elapsed >= 10_000 && agent.state !== 'entering' && agent.state !== 'leaving';
-        const style = getBubbleStyle(agent.state, agent.waitingForHuman);
+        const teamBubbleStyle = (isSupervisorWaiting || hasResultFlash) && !agent.waitingForHuman
+          ? { background: '#ce93d8', color: '#fff' }
+          : null;
+        const style = teamBubbleStyle ?? getBubbleStyle(agent.state, agent.waitingForHuman);
         const nameLabel = agent.name || agent.id.slice(0, 6);
 
         return (
@@ -132,6 +202,29 @@ export function BubbleOverlay({ canvasRef }: { canvasRef: React.RefObject<HTMLCa
               className="sprite-label"
             >
               {nameLabel}
+            </div>
+          </Fragment>
+        );
+      })}
+      {/* Supervisor check-in bubbles */}
+      {Array.from(supervisorCheckIns.entries()).map(([supervisorId, checkIn]) => {
+        const childAgent = agents.get(checkIn.childId);
+        const childText = childAgent?.activityText
+          ? (childAgent.activityText.length > 20
+            ? childAgent.activityText.slice(0, 19) + '\u2026'
+            : childAgent.activityText)
+          : (childAgent?.state ?? 'working');
+
+        return (
+          <Fragment key={`checkin-${supervisorId}`}>
+            <div
+              data-agent-id={supervisorId}
+              data-offset-y="-40"
+              className="speech-bubble checkin-bubble"
+              style={{ background: '#ffd54f', color: '#000', fontSize: '0.7em' }}
+            >
+              <div>{checkIn.message}</div>
+              <div style={{ opacity: 0.7, marginTop: '1px' }}>{childText}</div>
             </div>
           </Fragment>
         );

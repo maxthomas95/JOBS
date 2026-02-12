@@ -584,6 +584,51 @@
   white-space: nowrap;
 }
 
+.supervisor-badge {
+  background: #ffd54f;
+  color: #000;
+  font-size: 0.5rem;
+  font-weight: 700;
+  padding: 0.05rem 0.25rem;
+  border-radius: 999px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.agent-row.supervisor {
+  border-left: 2px solid #ffd54f;
+  padding-left: calc(0.4rem - 2px);
+}
+
+.team-progress {
+  font-size: 0.5rem;
+  opacity: 0.6;
+  background: rgba(206, 147, 216, 0.15);
+  border: 1px solid rgba(206, 147, 216, 0.3);
+  border-radius: 999px;
+  padding: 0 0.25rem;
+  white-space: nowrap;
+}
+
+.detail-team-lead {
+  color: #ffd54f;
+  font-weight: 600;
+  font-size: 0.6rem;
+}
+
+.detail-sibling-tag {
+  font-size: 0.58rem;
+  background: rgba(79, 195, 247, 0.15);
+  border: 1px solid rgba(79, 195, 247, 0.3);
+  border-radius: 4px;
+  padding: 0.1rem 0.3rem;
+  cursor: pointer;
+}
+
+.detail-sibling-tag:hover {
+  background: rgba(79, 195, 247, 0.3);
+}
+
 @media (max-width: 640px) {
   .pixel-office {
     padding: 0.75rem;

@@ -108,6 +108,9 @@ export function AgentDetailPanel() {
           style={{ background: CHARACTER_COLORS[agent.characterIndex % 8] }}
         />
         <span className="detail-name">{agent.name || agent.id.slice(0, 8)}</span>
+        {agent.childIds.length > 0 ? (
+          <span className="detail-team-lead">Team Lead</span>
+        ) : null}
         <button className="detail-close" onClick={() => selectAgent(null)}>X</button>
       </div>
 
@@ -156,25 +159,58 @@ export function AgentDetailPanel() {
         </div>
       ) : null}
 
-      {agent.childIds.length > 0 ? (
-        <div className="detail-section">
-          <div className="detail-label">Sub-agents ({agent.childIds.filter((id) => agents.has(id)).length} active)</div>
-          <div className="detail-children">
-            {agent.childIds.map((childId) => {
-              const child = agents.get(childId);
-              return (
-                <span
-                  key={childId}
-                  className={`detail-child-tag${child ? '' : ' detail-child-gone'}`}
-                  onClick={() => child && selectAgent(childId)}
-                >
-                  {child?.name || childId.slice(0, 6)}
-                </span>
-              );
-            })}
+      {agent.parentId ? (() => {
+        const parent = agents.get(agent.parentId);
+        if (!parent) return null;
+        const siblings = parent.childIds.filter((cid) => cid !== agent.id);
+        if (siblings.length === 0) return null;
+        return (
+          <div className="detail-section">
+            <div className="detail-label">Siblings</div>
+            <div className="detail-children">
+              {siblings.map((sibId) => {
+                const sib = agents.get(sibId);
+                return (
+                  <span
+                    key={sibId}
+                    className={`detail-sibling-tag${sib ? '' : ' detail-child-gone'}`}
+                    onClick={() => sib && selectAgent(sibId)}
+                  >
+                    {sib?.name || sibId.slice(0, 6)}
+                    {sib ? ` [${STATE_LABELS[sib.state]}]` : ''}
+                  </span>
+                );
+              })}
+            </div>
           </div>
-        </div>
-      ) : null}
+        );
+      })() : null}
+
+      {agent.childIds.length > 0 ? (() => {
+        const activeCount = agent.childIds.filter((id) => agents.has(id)).length;
+        const completedCount = agent.childIds.length - activeCount;
+        return (
+          <div className="detail-section">
+            <div className="detail-label">Sub-agents: {activeCount} active{completedCount > 0 ? `, ${completedCount} completed` : ''}</div>
+            <div className="detail-children">
+              {agent.childIds.map((childId) => {
+                const child = agents.get(childId);
+                return (
+                  <span
+                    key={childId}
+                    className={`detail-child-tag${child ? '' : ' detail-child-gone'}`}
+                    onClick={() => child && selectAgent(childId)}
+                    title={child ? STATE_LABELS[child.state] : 'departed'}
+                  >
+                    {child?.name || childId.slice(0, 6)}
+                    {child ? ` [${STATE_LABELS[child.state]}]` : ''}
+                  </span>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })() : null}
 
       {timelineSegments.length > 0 ? (
         <div className="detail-section">

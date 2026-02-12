@@ -16,6 +16,8 @@ export interface SessionEvent extends BaseEvent {
   characterIndex?: number;
   deskIndex?: number | null;
   name?: string;
+  /** Session ID of the parent agent that spawned this one */
+  parentId?: string | null;
 }
 
 export interface ActivityEvent extends BaseEvent {

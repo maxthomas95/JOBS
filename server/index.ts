@@ -7,7 +7,7 @@ import { SessionWatcher } from './bridge/watcher.js';
 import { parseJsonlLine, transformToPixelEvents } from './bridge/parser.js';
 import { SessionManager } from './session-manager.js';
 import { WSServer } from './ws-server.js';
-import { MockEventGenerator } from './mock-events.js';
+import { MockEventGenerator, SupervisorMockGenerator } from './mock-events.js';
 import { createSessionEvent } from './bridge/pixel-events.js';
 
 const app = express();
@@ -16,7 +16,8 @@ const rawClaudeDir = process.env.CLAUDE_DIR ?? join(homedir(), '.claude');
 const claudeDir = rawClaudeDir.startsWith('~')
   ? join(homedir(), rawClaudeDir.slice(1))
   : rawClaudeDir;
-const useMock = process.env.MOCK_EVENTS === 'true';
+const mockMode = process.env.MOCK_EVENTS ?? '';
+const useMock = mockMode === 'true' || mockMode === 'supervisor';
 
 app.use(express.static('dist'));
 
@@ -32,7 +33,10 @@ const wsServer = new WSServer(server, sessionManager);
 sessionManager.setSnapshotCallback(() => wsServer.broadcastSnapshot());
 
 if (useMock) {
-  const mock = new MockEventGenerator();
+  const isSupervisorMode = mockMode === 'supervisor';
+  // eslint-disable-next-line no-console
+  console.log(`[mock] using ${isSupervisorMode ? 'supervisor' : 'basic'} mock events`);
+  const mock = isSupervisorMode ? new SupervisorMockGenerator() : new MockEventGenerator();
   mock.start((event) => {
     sessionManager.handleEvent(event);
     wsServer.broadcast(event);

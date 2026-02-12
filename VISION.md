@@ -444,28 +444,28 @@ open http://your-proxmox-host:8780
 ### v2-M3: Supervisor Mode — "Who's the boss?"
 > Parent agents become team leads who walk the floor and check on their sub-agents.
 
-- [ ] **Supervisor role detection** — automatically tag parent agents that spawned sub-agents
+- [x] **Supervisor role detection** — automatically tag parent agents that spawned sub-agents
   - Parent agent (the one that called `tool.spawn_agent`) gets a `role: 'supervisor'` flag
   - Visual differentiation: distinct sprite, badge/hat overlay, or subtle glow/outline
   - HUD roster shows supervisor icon next to team lead agents
-- [ ] **Patrol behavior** — supervisors walk between their sub-agents' desks
+- [x] **Patrol behavior** — supervisors walk between their sub-agents' desks
   - When not actively coding/thinking, supervisor periodically walks to each child agent's desk
   - Patrol route visits each sub-agent in order, pauses briefly at each desk
   - Configurable patrol frequency (default: every 30-60 seconds of idle time)
-- [ ] **Check-in interactions** — supervisor "talks to" sub-agents
+- [x] **Check-in interactions** — supervisor "talks to" sub-agents
   - When supervisor arrives at a sub-agent's desk, play a brief interaction animation
   - Speech bubble from supervisor: `"Checking progress..."`, `"How's auth.ts?"` (uses child's current file context)
   - Sub-agent responds with their current state: `"Writing tests"`, `"Waiting for input"`
   - Interaction lasts 2-3 seconds before supervisor moves to the next agent
-- [ ] **Delegation visualization** — show the moment work is assigned
+- [x] **Delegation visualization** — show the moment work is assigned
   - When `tool.spawn_agent` fires, supervisor walks to the door, new agent enters
   - Supervisor walks new agent to their assigned desk (escort animation)
   - Brief handoff animation: supervisor gestures at desk, sub-agent sits down
-- [ ] **Waiting-on-team state** — supervisor behavior while sub-agents work
+- [x] **Waiting-on-team state** — supervisor behavior while sub-agents work
   - When supervisor is waiting on sub-agent results, show them pacing or standing mid-office
   - Bubble: `"Waiting on 2 agents"` (count of active children)
   - When a sub-agent completes, supervisor walks over to "collect" the result
-- [ ] **Team summary in HUD** — supervisor section in roster
+- [x] **Team summary in HUD** — supervisor section in roster
   - Collapsible team group headed by supervisor name
   - Shows: sub-agent count, how many active vs complete, team progress indicator
   - Click supervisor in roster to highlight the entire team (supervisor + all children)
