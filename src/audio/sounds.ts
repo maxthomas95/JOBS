@@ -73,7 +73,7 @@ export const LOOP_VOLUMES: Record<LoopId, number> = {
 /** Default volumes per one-shot (relative to master, 0-1) */
 export const SOUND_VOLUMES: Record<SoundId, number> = {
   'door-bell': 0.8,
-  'door-bell-quiet': 0.6,
+  'door-bell-quiet': 0.3,
   'error-alert': 0.9,
   'task-complete': 0.8,
   'waiting-ping': 0.15,
