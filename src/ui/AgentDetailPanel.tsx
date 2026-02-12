@@ -82,6 +82,7 @@ export function AgentDetailPanel() {
 
   // Build timeline segments with duration for tooltip
   const timelineSegments: Array<{ state: AgentState; fraction: number; durationMs: number }> = [];
+  const stateTotals = new Map<AgentState, number>();
   if (history.length > 0 && duration > 0) {
     for (let i = 0; i < history.length; i++) {
       const start = history[i].timestamp;
@@ -91,8 +92,13 @@ export function AgentDetailPanel() {
       if (frac > 0.005) {
         timelineSegments.push({ state: history[i].state, fraction: frac, durationMs: segDuration });
       }
+      stateTotals.set(history[i].state, (stateTotals.get(history[i].state) ?? 0) + segDuration);
     }
   }
+  // Sort states by time descending, skip trivial ones (<1s)
+  const sortedStates = Array.from(stateTotals.entries())
+    .filter(([, ms]) => ms >= 1000)
+    .sort((a, b) => b[1] - a[1]);
 
   return (
     <div className="detail-panel">
@@ -185,6 +191,30 @@ export function AgentDetailPanel() {
                 title={`${STATE_LABELS[seg.state]} - ${formatDuration(seg.durationMs)}`}
               />
             ))}
+          </div>
+        </div>
+      ) : null}
+
+      {sortedStates.length > 0 ? (
+        <div className="detail-section">
+          <div className="detail-label">Time by state</div>
+          <div className="detail-tools">
+            {sortedStates.map(([state, ms]) => {
+              const pct = duration > 0 ? Math.round((ms / duration) * 100) : 0;
+              return (
+                <div key={state} className="tool-row">
+                  <span className="state-label-name">
+                    <span className="state-dot" style={{ background: STATE_COLORS[state] }} />
+                    {STATE_LABELS[state]}
+                  </span>
+                  <span className="tool-stats">
+                    <span className="tool-time">{formatDuration(ms)}</span>
+                    <span className="tool-sep">/</span>
+                    <span className="tool-count">{pct}%</span>
+                  </span>
+                </div>
+              );
+            })}
           </div>
         </div>
       ) : null}

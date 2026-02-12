@@ -199,8 +199,10 @@ export class SessionManager {
         this.applyState(agent, 'waiting', STATIONS.coffee, 'Waiting...');
         agent.waitingForHuman = true;
       } else if (event.action === 'user_prompt') {
-        // user_prompt: don't change state/location, just clear activityText
-        agent.activityText = null;
+        // Human sent a message — Claude will start processing immediately.
+        // Transition to thinking since the JSONL won't write the thinking
+        // block until thinking finishes (could be 10-30s of no events).
+        this.applyState(agent, 'thinking', STATIONS.whiteboard, 'Processing...');
       }
       return;
     }

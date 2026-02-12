@@ -224,8 +224,10 @@ export const useOfficeStore = create<OfficeState>()(
           patch.targetPosition = tileToWorld(STATIONS.coffee);
           patch.activityText = 'Waiting...';
         } else if (event.action === 'user_prompt') {
-          // user_prompt fires during normal tool approvals, don't flag as waiting
-          patch.activityText = null;
+          // Human sent a message — transition to thinking immediately
+          patch.state = 'thinking';
+          patch.targetPosition = tileToWorld(STATIONS.whiteboard);
+          patch.activityText = 'Processing...';
         }
       } else if (event.type === 'tool' && event.status === 'started') {
         const toolState = classifyTool(event.tool);

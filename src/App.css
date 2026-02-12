@@ -448,6 +448,21 @@
   font-size: 0.6rem;
 }
 
+.state-label-name {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.6rem;
+  opacity: 0.8;
+}
+
+.state-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
 .tool-name {
   font-family: monospace;
   opacity: 0.7;
