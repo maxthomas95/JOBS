@@ -1,13 +1,11 @@
-import { AnimatedSprite, Container, Graphics, Spritesheet, Texture, SCALE_MODES } from 'pixi.js';
+import { Assets, Container, Graphics } from 'pixi.js';
+import { AnimatedGIF } from '@pixi/gif';
 import type { Agent } from '../types/agent.js';
 import type { Point } from '../types/agent.js';
 import { STATIONS, tileToWorld } from '../types/agent.js';
-import { characterData } from '../assets/sprites/characters.js';
 import { findPath } from './Pathfinder.js';
 import { useOfficeStore } from '../state/useOfficeStore.js';
-import atlasUrl from '../assets/sprites/32x32folk.png';
-
-type Direction = 'up' | 'down' | 'left' | 'right';
+import claudeGifUrl from '../../images/claude.gif';
 
 /** Current sprite positions in world coordinates, updated every frame. Used by HTML bubble overlay. */
 export const spritePositions = new Map<string, Point>();
@@ -26,8 +24,10 @@ const PACE_PAUSE_MIN = 3; // min seconds between pace targets
 const PACE_PAUSE_MAX = 5; // max seconds between pace targets
 const PACE_AREA = { minX: 7, maxX: 11, minY: 7, maxY: 9 }; // mid-office tile range
 
+const SPRITE_SIZE = 32;
+
 interface AgentVisual {
-  sprite: AnimatedSprite;
+  sprite: AnimatedGIF;
   shadow: Graphics;
   phase: number;
   /** Remaining waypoints the agent is walking toward. */
@@ -60,32 +60,22 @@ interface AgentVisual {
 
 export class AgentSpriteManager {
   private readonly sprites = new Map<string, AgentVisual>();
-  private readonly spritesheets = new Map<number, Spritesheet>();
-  private useFallbackSprites = false;
+  private gifTemplate: AnimatedGIF | null = null;
 
   constructor(private readonly container: Container) {}
 
   async loadSpritesheets(): Promise<void> {
     try {
-      const texture = Texture.from(atlasUrl);
-      texture.source.scaleMode = SCALE_MODES.NEAREST;
-      for (let i = 0; i < 8; i += 1) {
-        const sheet = new Spritesheet(texture, characterData[i]);
-        await sheet.parse();
-        if (!sheet.textures['down_1']) {
-          throw new Error(`missing expected frame for character ${i}`);
-        }
-        this.spritesheets.set(i, sheet);
-      }
+      const gif = await Assets.load(claudeGifUrl) as AnimatedGIF;
+      this.gifTemplate = gif;
     } catch (error) {
-      this.useFallbackSprites = true;
       // eslint-disable-next-line no-console
-      console.error('[sprites] falling back to debug squares:', (error as Error).message);
+      console.error('[sprites] failed to load claude.gif:', (error as Error).message);
     }
   }
 
   addAgent(agent: Agent): void {
-    if (this.sprites.has(agent.id)) {
+    if (this.sprites.has(agent.id) || !this.gifTemplate) {
       return;
     }
 
@@ -96,19 +86,12 @@ export class AgentSpriteManager {
     shadow.y = agent.position.y + 4;
     this.container.addChild(shadow);
 
-    const textures = this.useFallbackSprites
-      ? [Texture.WHITE]
-      : this.getWalkTextures(agent.characterIndex, 'down');
-    const sprite = new AnimatedSprite(textures);
+    const sprite = this.gifTemplate.clone();
     sprite.anchor.set(0.5, 0.75);
+    sprite.width = SPRITE_SIZE;
+    sprite.height = SPRITE_SIZE;
     sprite.x = agent.position.x;
     sprite.y = agent.position.y;
-    sprite.animationSpeed = 0.12;
-    if (this.useFallbackSprites) {
-      sprite.tint = 0xff4d4d;
-      sprite.width = 18;
-      sprite.height = 24;
-    }
     sprite.play();
     this.container.addChild(sprite);
     this.sprites.set(agent.id, {
@@ -149,12 +132,14 @@ export class AgentSpriteManager {
         // Keep shadow tracking + scale/focus (below), but skip normal movement
         visual.shadow.x = sprite.x;
         visual.shadow.y = sprite.y + 4;
-        const BASE_SCALE = 1.4;
+
         if (id === focusedId || focusedAgentIds.has(id)) {
-          const pulse = BASE_SCALE + Math.sin(visual.phase * 4) * 0.2;
-          sprite.scale.set(pulse, pulse);
+          const pulseSize = SPRITE_SIZE + Math.sin(visual.phase * 4) * 3;
+          sprite.width = pulseSize;
+          sprite.height = pulseSize;
         } else {
-          sprite.scale.set(BASE_SCALE, BASE_SCALE);
+          sprite.width = SPRITE_SIZE;
+          sprite.height = SPRITE_SIZE;
         }
         spritePositions.set(id, { x: sprite.x, y: sprite.y });
         continue;
@@ -165,7 +150,7 @@ export class AgentSpriteManager {
       if (patrolHandled) {
         visual.shadow.x = sprite.x;
         visual.shadow.y = sprite.y + 4;
-        const BASE_SCALE = 1.4;
+
         // Supervisor gold glow when paused at a desk (not walking)
         const patrolWalking = visual.patrolWaypoints.length > 0 && visual.patrolPauseTimer <= 0;
         if (!patrolWalking && agent.state !== 'error' && !agent.waitingForHuman) {
@@ -175,10 +160,12 @@ export class AgentSpriteManager {
           sprite.tint = (0xff << 16) | (g << 8) | b;
         }
         if (id === focusedId || focusedAgentIds.has(id)) {
-          const pulse = BASE_SCALE + Math.sin(visual.phase * 4) * 0.2;
-          sprite.scale.set(pulse, pulse);
+          const pulseSize = SPRITE_SIZE + Math.sin(visual.phase * 4) * 3;
+          sprite.width = pulseSize;
+          sprite.height = pulseSize;
         } else {
-          sprite.scale.set(BASE_SCALE, BASE_SCALE);
+          sprite.width = SPRITE_SIZE;
+          sprite.height = SPRITE_SIZE;
         }
         spritePositions.set(id, { x: sprite.x, y: sprite.y });
         continue;
@@ -189,12 +176,14 @@ export class AgentSpriteManager {
       if (pacingHandled) {
         visual.shadow.x = sprite.x;
         visual.shadow.y = sprite.y + 4;
-        const BASE_SCALE = 1.4;
+
         if (id === focusedId || focusedAgentIds.has(id)) {
-          const pulse = BASE_SCALE + Math.sin(visual.phase * 4) * 0.2;
-          sprite.scale.set(pulse, pulse);
+          const pulseSize = SPRITE_SIZE + Math.sin(visual.phase * 4) * 3;
+          sprite.width = pulseSize;
+          sprite.height = pulseSize;
         } else {
-          sprite.scale.set(BASE_SCALE, BASE_SCALE);
+          sprite.width = SPRITE_SIZE;
+          sprite.height = SPRITE_SIZE;
         }
         spritePositions.set(id, { x: sprite.x, y: sprite.y });
         continue;
@@ -234,8 +223,6 @@ export class AgentSpriteManager {
             const ny = dy / dist;
             sprite.x += nx * speed * deltaSeconds;
             sprite.y += ny * speed * deltaSeconds;
-            const dir: Direction = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : dy > 0 ? 'down' : 'up';
-            sprite.textures = this.getWalkTextures(agent.characterIndex, dir);
             if (!sprite.playing) {
               sprite.play();
             }
@@ -247,14 +234,13 @@ export class AgentSpriteManager {
       visual.shadow.x = sprite.x;
       visual.shadow.y = sprite.y + 4;
 
-      // Base scale + focus highlight pulse + waitingForHuman treatment
-      const BASE_SCALE = 1.4;
+      // Focus highlight pulse + waitingForHuman treatment
       if (agent.waitingForHuman && visual.waypoints.length === 0 && agent.targetPosition) {
         // Pulsing yellow tint for waiting-for-human
         const tintPulse = Math.sin(visual.phase * 3);
         sprite.tint = tintPulse > 0 ? 0xffeb3b : 0xffffff;
         // Bob relative to target position (non-cumulative)
-        sprite.y = agent.targetPosition.y + Math.sin(visual.phase * 1.5) * 1.5;
+        sprite.y = agent.targetPosition.y + Math.sin(visual.phase * 1.5) * 0.5;
       }
 
       // Supervisor gold glow when idle at station (not walking, not error, not waiting-for-human)
@@ -272,10 +258,12 @@ export class AgentSpriteManager {
       }
 
       if (id === focusedId || focusedAgentIds.has(id)) {
-        const pulse = BASE_SCALE + Math.sin(visual.phase * 4) * 0.2;
-        sprite.scale.set(pulse, pulse);
+        const pulseSize = SPRITE_SIZE + Math.sin(visual.phase * 4) * 3;
+        sprite.width = pulseSize;
+        sprite.height = pulseSize;
       } else {
-        sprite.scale.set(BASE_SCALE, BASE_SCALE);
+        sprite.width = SPRITE_SIZE;
+        sprite.height = SPRITE_SIZE;
       }
 
       // Export sprite position for HTML bubble overlay
@@ -325,10 +313,9 @@ export class AgentSpriteManager {
         // Arrived at door
         visual.delegationState = 'waiting-at-door';
         visual.delegationTimer = DOOR_WAIT_DURATION;
-        sprite.textures = [this.getFrame(agent.characterIndex, 'right_1')];
         sprite.stop();
       } else {
-        this.walkAlongWaypoints(sprite, visual, agent, deltaSeconds, 35);
+        this.walkAlongWaypoints(sprite, visual, deltaSeconds, 35);
       }
       return true;
     }
@@ -376,8 +363,6 @@ export class AgentSpriteManager {
           this.generateReturnPath(agent, visual, sprite);
         }
       }
-      // Idle animation at door
-      sprite.textures = [this.getFrame(agent.characterIndex, 'right_1')];
       sprite.stop();
       return true;
     }
@@ -398,11 +383,10 @@ export class AgentSpriteManager {
           visual.delegationTimer = 0;
           this.generateReturnPath(agent, visual, sprite);
         } else {
-          sprite.textures = [this.getFrame(agent.characterIndex, 'down_1')];
           sprite.stop();
         }
       } else {
-        this.walkAlongWaypoints(sprite, visual, agent, deltaSeconds, 35);
+        this.walkAlongWaypoints(sprite, visual, deltaSeconds, 35);
       }
       return true;
     }
@@ -416,7 +400,7 @@ export class AgentSpriteManager {
         visual.delegationTimer = 0;
         return false;
       }
-      this.walkAlongWaypoints(sprite, visual, agent, deltaSeconds, 35);
+      this.walkAlongWaypoints(sprite, visual, deltaSeconds, 35);
       return true;
     }
 
@@ -443,7 +427,7 @@ export class AgentSpriteManager {
   /**
    * Generate waypoints to return the agent to their own desk.
    */
-  private generateReturnPath(agent: Agent, visual: AgentVisual, sprite: AnimatedSprite): void {
+  private generateReturnPath(agent: Agent, visual: AgentVisual, sprite: AnimatedGIF): void {
     if (agent.deskIndex !== null) {
       const deskTile = STATIONS.desks[agent.deskIndex];
       const deskWorld = tileToWorld({ x: deskTile.x, y: deskTile.y + 1 });
@@ -458,9 +442,8 @@ export class AgentSpriteManager {
    * Walk the sprite along its waypoint array at the given speed.
    */
   private walkAlongWaypoints(
-    sprite: AnimatedSprite,
+    sprite: AnimatedGIF,
     visual: AgentVisual,
-    agent: Agent,
     deltaSeconds: number,
     speed: number,
   ): void {
@@ -479,10 +462,6 @@ export class AgentSpriteManager {
       const ny = dy / dist;
       sprite.x += nx * speed * deltaSeconds;
       sprite.y += ny * speed * deltaSeconds;
-      const dir: Direction = Math.abs(dx) > Math.abs(dy)
-        ? (dx > 0 ? 'right' : 'left')
-        : (dy > 0 ? 'down' : 'up');
-      sprite.textures = this.getWalkTextures(agent.characterIndex, dir);
       if (!sprite.playing) sprite.play();
     }
   }
@@ -521,20 +500,17 @@ export class AgentSpriteManager {
       visual.paceTimer = PACE_PAUSE_MIN + Math.random() * (PACE_PAUSE_MAX - PACE_PAUSE_MIN);
       visual.paceTarget = null;
       visual.waypoints = [];
-      // Start with idle pose facing down
-      sprite.textures = [this.getFrame(agent.characterIndex, 'down_1')];
       sprite.stop();
       return true;
     }
 
     // Currently walking to a pace target
     if (visual.paceTarget && visual.waypoints.length > 0) {
-      this.walkAlongWaypoints(sprite, visual, agent, deltaSeconds, PACE_SPEED);
+      this.walkAlongWaypoints(sprite, visual, deltaSeconds, PACE_SPEED);
       if (visual.waypoints.length === 0) {
         // Arrived at pace target — start pause
         visual.paceTarget = null;
         visual.paceTimer = PACE_PAUSE_MIN + Math.random() * (PACE_PAUSE_MAX - PACE_PAUSE_MIN);
-        sprite.textures = [this.getFrame(agent.characterIndex, 'down_1')];
         sprite.stop();
       }
       return true;
@@ -556,8 +532,6 @@ export class AgentSpriteManager {
         visual.paceTimer = 0.5;
       }
     } else {
-      // Idle pose while pausing — face down
-      sprite.textures = [this.getFrame(agent.characterIndex, 'down_1')];
       sprite.stop();
     }
     return true;
@@ -644,7 +618,7 @@ export class AgentSpriteManager {
         visual.patrolWaypoints = path.length > 0 ? path : [targetWorld];
       }
 
-      const arrived = this.walkPatrolWaypoints(sprite, visual, agent, deltaSeconds);
+      const arrived = this.walkPatrolWaypoints(sprite, visual, deltaSeconds);
       if (arrived) {
         // Start pause and check-in
         visual.patrolPauseTimer = PATROL_PAUSE_DURATION;
@@ -671,7 +645,7 @@ export class AgentSpriteManager {
         visual.patrolWaypoints = path.length > 0 ? path : [ownWorld];
       }
 
-      const arrived = this.walkPatrolWaypoints(sprite, visual, agent, deltaSeconds);
+      const arrived = this.walkPatrolWaypoints(sprite, visual, deltaSeconds);
       if (arrived) {
         visual.isPatrolling = false;
         visual.patrolCooldown = PATROL_COOLDOWN_DURATION;
@@ -688,9 +662,8 @@ export class AgentSpriteManager {
    * Walk the sprite along patrolWaypoints. Returns true when all waypoints are consumed (arrived).
    */
   private walkPatrolWaypoints(
-    sprite: AnimatedSprite,
+    sprite: AnimatedGIF,
     visual: AgentVisual,
-    agent: Agent,
     deltaSeconds: number,
   ): boolean {
     if (visual.patrolWaypoints.length === 0) return true;
@@ -712,9 +685,6 @@ export class AgentSpriteManager {
     const ny = dy / dist;
     sprite.x += nx * speed * deltaSeconds;
     sprite.y += ny * speed * deltaSeconds;
-    const dir: Direction =
-      Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : dy > 0 ? 'down' : 'up';
-    sprite.textures = this.getWalkTextures(agent.characterIndex, dir);
     if (!sprite.playing) sprite.play();
     return false;
   }
@@ -727,74 +697,43 @@ export class AgentSpriteManager {
     sprite.tint = 0xffffff;
 
     if (agent.state === 'thinking') {
-      sprite.textures = [this.getFrame(agent.characterIndex, 'up_1')];
       sprite.stop();
-      sprite.x += Math.sin(visual.phase) * 0.15;
+      sprite.x += Math.sin(visual.phase) * 0.1;
       return;
     }
 
     if (agent.state === 'terminal') {
-      sprite.textures = [this.getFrame(agent.characterIndex, 'right_1')];
       sprite.stop();
-      sprite.y += Math.sin(visual.phase * 2) * 1;
+      sprite.y += Math.sin(visual.phase * 2) * 0.3;
       return;
     }
 
     if (agent.state === 'coding' || agent.state === 'reading') {
-      sprite.textures = [this.getFrame(agent.characterIndex, 'down_1')];
       sprite.stop();
-      sprite.y += Math.sin(visual.phase) * 1;
+      sprite.y += Math.sin(visual.phase) * 0.3;
       return;
     }
 
     if (agent.state === 'searching') {
-      sprite.textures = [this.getFrame(agent.characterIndex, 'left_1')];
       sprite.stop();
-      sprite.x += Math.sin(visual.phase * 1.5) * 0.3;
+      sprite.x += Math.sin(visual.phase * 1.5) * 0.15;
       return;
     }
 
     if (agent.state === 'cooling') {
-      sprite.textures = [this.getFrame(agent.characterIndex, 'down_1')];
       sprite.stop();
       sprite.y += Math.sin(visual.phase * 0.8) * 0.4;
       return;
     }
 
-    if (agent.state === 'delegating') {
-      sprite.textures = [this.getFrame(agent.characterIndex, 'right_1')];
-      sprite.stop();
-      return;
-    }
-
     if (agent.state === 'error') {
-      sprite.textures = [this.getFrame(agent.characterIndex, 'down_1')];
       sprite.stop();
       sprite.tint = Math.sin(visual.phase * 3) > 0 ? 0xff4444 : 0xffffff;
       return;
     }
 
-    if (agent.state === 'waiting') {
-      sprite.textures = [this.getFrame(agent.characterIndex, 'down_1')];
-      sprite.stop();
-      return;
-    }
-
-    // Default idle
-    sprite.textures = [this.getFrame(agent.characterIndex, 'down_1')];
+    // Default idle (delegating, waiting, etc.)
     sprite.stop();
   }
 
-  private getWalkTextures(characterIndex: number, direction: Direction): Texture[] {
-    return [
-      this.getFrame(characterIndex, `${direction}_0`),
-      this.getFrame(characterIndex, `${direction}_1`),
-      this.getFrame(characterIndex, `${direction}_2`),
-    ];
-  }
-
-  private getFrame(characterIndex: number, frameName: string): Texture {
-    const sheet = this.spritesheets.get(characterIndex);
-    return sheet?.textures[frameName] ?? Texture.WHITE;
-  }
 }

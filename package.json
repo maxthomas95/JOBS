@@ -13,6 +13,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@pixi/gif": "^3.0.1",
     "@types/howler": "^2.2.12",
     "@types/pathfinding": "^0.1.0",
     "chokidar": "^5.0.0",
