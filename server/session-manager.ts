@@ -205,8 +205,11 @@ export class SessionManager {
       return;
     }
 
-    if (event.type === 'tool' && event.status === 'started') {
+    if (event.type === 'tool') {
       agent.lastEventType = `tool.${event.tool}`;
+    }
+
+    if (event.type === 'tool' && event.status === 'started') {
       const context = event.context ?? null;
       const mode = classifyTool(event.tool);
       // Record potential child spawn with the agent name from context

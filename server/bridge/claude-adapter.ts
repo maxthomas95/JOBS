@@ -6,6 +6,9 @@ import {
 } from './pixel-events.js';
 import type { RawContentBlock, RawJsonlEvent } from './types.js';
 
+/** Track toolUseId → toolName so we can label completion events */
+const toolNameCache = new Map<string, string>();
+
 function getMeta(raw: RawJsonlEvent): { sessionId: string; agentId: string; timestamp: number } {
   const sessionId = String(raw.input?._sessionId ?? raw.toolUseId ?? 'unknown');
   const agentId = String(raw.input?._agentId ?? sessionId);
@@ -60,6 +63,10 @@ function assistantEvents(raw: RawJsonlEvent): PixelEvent[] {
     } else if (parsed.type === 'tool_use') {
       const tool = parsed.name ?? 'unknown_tool';
       const context = extractSafeContext(tool, parsed.input);
+      // Cache tool name for matching on completion
+      if (parsed.id) {
+        toolNameCache.set(parsed.id, tool);
+      }
       events.push(
         createToolEvent(sessionId, agentId, timestamp, {
           tool,
@@ -76,18 +83,32 @@ function assistantEvents(raw: RawJsonlEvent): PixelEvent[] {
 
 function userEvents(raw: RawJsonlEvent): PixelEvent[] {
   const { sessionId, agentId, timestamp } = getMeta(raw);
-  if (raw.userType === 'tool_result') {
-    const tool = raw.toolName ?? 'unknown_tool';
-    const status = raw.isError ? 'error' : 'completed';
-    return [
-      createToolEvent(sessionId, agentId, timestamp, {
-        tool,
-        status,
-        toolUseId: raw.toolUseId,
-      }),
-    ];
+  const blocks = raw.message?.content ?? [];
+  const events: PixelEvent[] = [];
+
+  for (const block of blocks) {
+    const parsed = block as RawContentBlock;
+    if (parsed.type === 'tool_result' && parsed.tool_use_id) {
+      const tool = toolNameCache.get(parsed.tool_use_id) ?? 'unknown_tool';
+      const status = parsed.is_error ? 'error' : 'completed';
+      events.push(
+        createToolEvent(sessionId, agentId, timestamp, {
+          tool,
+          status,
+          toolUseId: parsed.tool_use_id,
+        }),
+      );
+      // Clean up cache entry
+      toolNameCache.delete(parsed.tool_use_id);
+    }
   }
-  return [createActivityEvent(sessionId, agentId, timestamp, 'user_prompt')];
+
+  // If no tool_result blocks found, treat as human user prompt
+  if (events.length === 0) {
+    events.push(createActivityEvent(sessionId, agentId, timestamp, 'user_prompt'));
+  }
+
+  return events;
 }
 
 export function toPixelEvents(raw: RawJsonlEvent): PixelEvent[] {

@@ -191,7 +191,7 @@ export function AgentDetailPanel() {
 
       {sortedTools.length > 0 ? (
         <div className="detail-section">
-          <div className="detail-label">Tools Used</div>
+          <div className="detail-label">Tools (calls / time)</div>
           <div className="detail-tools">
             {sortedTools.map(([tool, count]) => {
               const totalMs = toolTimes.get(tool) ?? 0;
@@ -200,9 +200,8 @@ export function AgentDetailPanel() {
                   <span className="tool-name">{tool}</span>
                   <span className="tool-stats">
                     <span className="tool-count">{count}x</span>
-                    {totalMs > 0 ? (
-                      <span className="tool-time">{formatDuration(totalMs)}</span>
-                    ) : null}
+                    <span className="tool-sep">/</span>
+                    <span className="tool-time">{totalMs > 0 ? formatDuration(totalMs) : '--'}</span>
                   </span>
                 </div>
               );

@@ -149,12 +149,12 @@ export class AgentSpriteManager {
 
       // Base scale + focus highlight pulse + waitingForHuman treatment
       const BASE_SCALE = 1.4;
-      if (agent.waitingForHuman) {
+      if (agent.waitingForHuman && visual.waypoints.length === 0 && agent.targetPosition) {
         // Pulsing yellow tint for waiting-for-human
         const tintPulse = Math.sin(visual.phase * 3);
         sprite.tint = tintPulse > 0 ? 0xffeb3b : 0xffffff;
-        // More noticeable bob
-        sprite.y += Math.sin(visual.phase * 1.5) * 1.5;
+        // Bob relative to target position (non-cumulative)
+        sprite.y = agent.targetPosition.y + Math.sin(visual.phase * 1.5) * 1.5;
       }
       if (id === focusedId) {
         const pulse = BASE_SCALE + Math.sin(visual.phase * 4) * 0.2;

@@ -7,6 +7,10 @@ export interface RawContentBlock {
   name?: string;
   input?: Record<string, unknown>;
   id?: string;
+  /** Present on tool_result blocks — matches the tool_use id */
+  tool_use_id?: string;
+  /** Some tool_result blocks include an is_error flag */
+  is_error?: boolean;
 }
 
 export interface RawMessage {

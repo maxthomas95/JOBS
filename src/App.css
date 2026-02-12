@@ -464,6 +464,10 @@
   font-variant-numeric: tabular-nums;
 }
 
+.tool-sep {
+  opacity: 0.3;
+}
+
 .tool-time {
   opacity: 0.4;
   font-size: 0.55rem;
