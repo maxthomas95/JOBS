@@ -34,7 +34,9 @@ export class MockEventGenerator {
       // Spawn sub-agent (delegating at desk)
       () => createToolEvent(this.sessionId, this.agentId, Date.now(), { tool: 'Task', status: 'started', context: 'Explore' }),
       () => createToolEvent(this.sessionId, this.agentId, Date.now(), { tool: 'Task', status: 'completed' }),
-      // User prompt → waiting for human
+      // Waiting for human input
+      () => createActivityEvent(this.sessionId, this.agentId, Date.now(), 'waiting'),
+      // User prompt resumes → thinking
       () => createActivityEvent(this.sessionId, this.agentId, Date.now(), 'user_prompt'),
       // Error scenario — tool error
       () => createToolEvent(this.sessionId, this.agentId, Date.now(), { tool: 'Bash', status: 'started', context: 'npm build' }),

@@ -488,14 +488,15 @@ open http://your-proxmox-host:8780
 ### v2-M4.5: Audio Polish — "Make it sound right"
 > Replace programmer-art oscillator sounds with real audio samples. The plumbing is done — AudioManager, store, event wiring, loop management, HUD controls all work. Just need better sounds.
 
-- [ ] **Source real samples** — browse freesound.org (CC0) for office sounds, or use jsfxr for tuned retro effects
+- [x] **Source real samples** — freesound.org (CC0) office sounds
   - Keyboard clacking loop (mechanical keyboard, not too aggressive)
   - Coffee machine / kettle bubbling
   - Ambient office hum (HVAC, distant murmur)
   - Page turning / paper rustling
   - Terminal typing (clunkier than keyboard)
   - Paper shuffle / filing cabinet
-- [ ] **Source or generate chime samples** — jsfxr or freesound
+  - Footsteps (agent walking from door to desk)
+- [x] **Source chime samples** — freesound.org (CC0)
   - Door bell (arrival) — friendly two-tone
   - Door bell (departure) — softer/descending variant
   - Task complete — satisfying success jingle
@@ -503,13 +504,15 @@ open http://your-proxmox-host:8780
   - Waiting ping — gentle notification
   - Delegation chime — handoff motif
   - Check-in ping — subtle attention sound
-- [ ] **Switch to Howler.js** for file-based playback (replaces raw Web Audio API oscillators)
+- [x] **Switch to Howler.js** for file-based playback (replaces raw Web Audio API oscillators)
   - `npm install howler` + `@types/howler`
   - Rewrite AudioManager to load .ogg files via Howl instances
   - Keep the same `play()` / `startLoop()` / `stopLoop()` API
-  - Pre-load all sounds on first unlock
-- [ ] **Add .ogg files** to `src/assets/audio/` (bundled by Vite)
-- [ ] **Tune volumes and timing** — get the balance right between ambient, loops, and one-shots
+  - Pre-load all sounds on first `enabled` or `unlock()`
+  - Fade-out with cancel-on-restart to prevent stacking
+- [x] **Add .ogg files** to `src/assets/audio/` (14 files, ~2MB total, bundled by Vite)
+- [x] **Tune volumes and timing** — per-sound volume config, 10s footstep cutoff
+- [x] **Move one-shot triggers to AnimationController** — fires on state transitions (works with both events and snapshots)
 - [ ] **Day/night cycle** — office lighting shifts based on real time of day
 - **Deliverable:** Sounds you'd actually want to leave on
 

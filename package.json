@@ -13,10 +13,12 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@types/howler": "^2.2.12",
     "@types/pathfinding": "^0.1.0",
     "chokidar": "^5.0.0",
     "dotenv": "^16.4.7",
     "express": "^4.21.0",
+    "howler": "^2.2.4",
     "pathfinding": "^0.4.18",
     "pixi.js": "^8.0.0",
     "react": "^19.0.0",
