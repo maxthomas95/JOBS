@@ -81,6 +81,7 @@ export class SupervisorMockGenerator {
   private readonly parentId = 'mock-supervisor';
   private readonly child1Id = 'mock-child-1';
   private readonly child2Id = 'mock-child-2';
+  private readonly project = 'mock-supervisor';
 
   start(callback: (event: PixelEvent) => void): void {
     this.stop();
@@ -89,7 +90,7 @@ export class SupervisorMockGenerator {
     // children work independently, one finishes, then the other
     const steps: Array<() => PixelEvent> = [
       // === Parent starts and does initial work ===
-      () => createSessionEvent(this.parentId, 'started', { agentId: this.parentId }),
+      () => createSessionEvent(this.parentId, 'started', { agentId: this.parentId, project: this.project }),
       () => createActivityEvent(this.parentId, this.parentId, Date.now(), 'thinking'),
       () => createToolEvent(this.parentId, this.parentId, Date.now(), { tool: 'Read', status: 'started', context: 'VISION.md' }),
       () => createToolEvent(this.parentId, this.parentId, Date.now(), { tool: 'Read', status: 'completed' }),
@@ -98,12 +99,12 @@ export class SupervisorMockGenerator {
       // === Parent delegates to child 1 (researcher) ===
       () => createToolEvent(this.parentId, this.parentId, Date.now(), { tool: 'Task', status: 'started', context: 'researcher' }),
       // Child 1 starts (session manager will link via pendingSpawn)
-      () => createSessionEvent(this.child1Id, 'started', { agentId: this.child1Id }),
+      () => createSessionEvent(this.child1Id, 'started', { agentId: this.child1Id, project: this.project }),
       () => createToolEvent(this.parentId, this.parentId, Date.now(), { tool: 'Task', status: 'completed' }),
 
       // === Parent delegates to child 2 (builder) ===
       () => createToolEvent(this.parentId, this.parentId, Date.now(), { tool: 'Task', status: 'started', context: 'builder' }),
-      () => createSessionEvent(this.child2Id, 'started', { agentId: this.child2Id }),
+      () => createSessionEvent(this.child2Id, 'started', { agentId: this.child2Id, project: this.project }),
       () => createToolEvent(this.parentId, this.parentId, Date.now(), { tool: 'Task', status: 'completed' }),
 
       // === Parent waits (cooling/idle while children work) ===
@@ -134,7 +135,7 @@ export class SupervisorMockGenerator {
 
       // === Child 1 finishes ===
       () => createSummaryEvent(this.child1Id, Date.now()),
-      () => createSessionEvent(this.child1Id, 'ended', { agentId: this.child1Id }),
+      () => createSessionEvent(this.child1Id, 'ended', { agentId: this.child1Id, project: this.project }),
 
       // === Parent reacts to child 1 finishing ===
       () => createActivityEvent(this.parentId, this.parentId, Date.now(), 'thinking'),
@@ -143,7 +144,7 @@ export class SupervisorMockGenerator {
 
       // === Child 2 finishes ===
       () => createSummaryEvent(this.child2Id, Date.now()),
-      () => createSessionEvent(this.child2Id, 'ended', { agentId: this.child2Id }),
+      () => createSessionEvent(this.child2Id, 'ended', { agentId: this.child2Id, project: this.project }),
 
       // === Parent wraps up ===
       () => createActivityEvent(this.parentId, this.parentId, Date.now(), 'responding'),
