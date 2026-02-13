@@ -5,7 +5,7 @@ import type { Point } from '../types/agent.js';
 import { STATIONS, tileToWorld } from '../types/agent.js';
 import { findPath } from './Pathfinder.js';
 import { useOfficeStore } from '../state/useOfficeStore.js';
-import claudeGifUrl from '../../images/claude.gif';
+import claudeGifUrl from '../assets/claude.gif';
 
 /** Current sprite positions in world coordinates, updated every frame. Used by HTML bubble overlay. */
 export const spritePositions = new Map<string, Point>();
