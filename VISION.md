@@ -546,13 +546,17 @@ open http://your-proxmox-host:8780
   - Auto-zoom to active area, hide HUD when idle, cinematic camera pans
   - Show ambient stats overlay (sessions today, uptime)
   - Perfect for office TV or Proxmox display
-- [ ] **LibreChat adapter** — show chat bot activity as additional agents
 - [ ] **Generic webhook adapter** — accept events from any source via HTTP POST
   - Standardized event schema, map to office behaviors
   - Could visualize CI/CD, deployments, monitoring alerts
 - [ ] **Multi-instance support** — watch multiple machines' Claude dirs
   - Aggregate sessions from multiple dev machines into one office
-- **Deliverable:** A living, always-on dashboard for your AI operations
+- [ ] **OpenAI Codex adapter** — visualize Codex CLI sessions alongside Claude Code
+  - New watcher path for Codex session directory (format TBD — reverse-engineer local storage)
+  - Codex parser + adapter mapping Codex events → PixelEvent (same states: thinking, writing, reading, terminal)
+  - Sprite differentiation: visual indicator distinguishing Claude vs Codex agents (color tint, badge, or unique sprite)
+  - Shared session manager — agent lifecycle is provider-agnostic, just needs a new event source
+- **Deliverable:** A living, always-on dashboard for your AI operations — provider-agnostic
 
 ---
 
