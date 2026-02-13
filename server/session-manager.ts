@@ -87,6 +87,7 @@ export class SessionManager {
   private readonly spawnWindowMs = 10000;
   private readonly staleIdleMs: number;
   private readonly staleEvictMs: number;
+  private readonly enteringTimeoutMs = 30000;
   private readonly waitingThresholdMs = 8000;
   private readonly waitingEvictMs: number;
   private onSnapshotNeeded: (() => void) | null = null;
@@ -262,6 +263,10 @@ export class SessionManager {
     }
   }
 
+  hasSession(sessionId: string): boolean {
+    return this.agents.has(sessionId);
+  }
+
   removeSession(sessionId: string): void {
     const agent = this.agents.get(sessionId);
     if (agent?.name) {
@@ -362,6 +367,17 @@ export class SessionManager {
           agent.stateChangedAt = now;
           changed = true;
           // Delay removal to allow leaving animation on client
+          setTimeout(() => {
+            this.removeSession(sessionId);
+            if (this.onSnapshotNeeded) this.onSnapshotNeeded();
+          }, 3000);
+        } else if (agent.state === 'entering' && now - agent.stateChangedAt > this.enteringTimeoutMs) {
+          // 'entering' is a transient state (~2s walk). If stuck longer than 30s,
+          // the session was likely picked up on startup with no real activity.
+          agent.state = 'leaving';
+          agent.targetPosition = tileToWorld(STATIONS.door);
+          agent.stateChangedAt = now;
+          changed = true;
           setTimeout(() => {
             this.removeSession(sessionId);
             if (this.onSnapshotNeeded) this.onSnapshotNeeded();

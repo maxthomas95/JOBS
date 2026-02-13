@@ -37,6 +37,12 @@ const CHARACTER_COLORS = [
   '#ba68c8', '#4dd0e1', '#fff176', '#f06292',
 ];
 
+/** Strip `mcp_{server}__` prefix for compact display */
+function shortenToolName(name: string): string {
+  const match = name.match(/^mcp_[^_]+__(.+)$/);
+  return match ? match[1] : name;
+}
+
 function formatDuration(ms: number): string {
   const secs = Math.floor(ms / 1000);
   if (secs < 60) return `${secs}s`;
@@ -262,8 +268,8 @@ export function AgentDetailPanel() {
             {sortedTools.map(([tool, count]) => {
               const totalMs = toolTimes.get(tool) ?? 0;
               return (
-                <div key={tool} className="tool-row">
-                  <span className="tool-name">{tool}</span>
+                <div key={tool} className="tool-row" title={tool}>
+                  <span className="tool-name">{shortenToolName(tool)}</span>
                   <span className="tool-stats">
                     <span className="tool-count">{count}x</span>
                     <span className="tool-sep">/</span>

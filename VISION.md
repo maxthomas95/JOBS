@@ -518,19 +518,19 @@ open http://your-proxmox-host:8780
 ### v2-M5: Visual Upgrade — "Make it gorgeous"
 > Replace placeholder graphics with proper pixel art. Character sprites are covered by the Clawdachi Sprite System moonshot — this milestone focuses on the office environment.
 
-- [ ] **LimeZu Modern Office tileset** ($2.50, personal use — not redistributable)
+- [x] **LimeZu Modern Office tileset** ($2.50, personal use — not redistributable)
   - Proper desks, chairs, computers, bookshelves, coffee area
   - Wall decorations, plants, windows
   - Tileset loader: parse sprite sheet into PixiJS textures, map tile IDs to positions
-- [ ] **JSON-driven tilemap config** — decouple layout from rendering
+- [x] **JSON-driven tilemap config** — decouple layout from rendering
   - Tile-level map definition: `{ tileId, x, y }` array defining the office
   - Station positions derived from map config (replace hardcoded STATIONS)
   - Tileset-agnostic: same map config works with LimeZu images or programmatic fallback
-- [ ] **Day/night cycle** — office lighting shifts based on real time of day
+- [x] **Day/night cycle** — office lighting shifts based on real time of day
 - [ ] **Customizable office layouts** — preset and user-defined
   - Users can rearrange desks, add rooms, resize office via JSON
   - Preset layouts: startup (open plan), corporate (cubicles), cozy (small team)
-- [ ] **Theme support**
+- [x] **Theme support**
   - Dark office (default), bright startup, cyberpunk neon, retro terminal green
   - Affects tilemap colors, HUD styling, ambient lighting
 - **Deliverable:** Screenshot-worthy pixel art office (LimeZu for personal use)

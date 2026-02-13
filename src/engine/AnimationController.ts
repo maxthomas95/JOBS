@@ -1,12 +1,15 @@
 import { Application, Container, Ticker } from 'pixi.js';
 import type { Agent } from '../types/agent.js';
 import { useOfficeStore } from '../state/useOfficeStore.js';
+import { useDayNightStore } from '../state/useDayNightStore.js';
 import { AgentSpriteManager } from './AgentSprite.js';
 import { AmbientEffects } from './AmbientEffects.js';
+import type { DayNightCycle } from './DayNightCycle.js';
 import { audioManager } from '../audio/AudioManager.js';
 
 export class AnimationController {
   private unsubscribe: (() => void) | null = null;
+  private unsubscribeDayNight: (() => void) | null = null;
   private ticker: Ticker | null = null;
   private spriteManager: AgentSpriteManager | null = null;
   private ambientEffects: AmbientEffects | null = null;
@@ -19,6 +22,7 @@ export class AnimationController {
     private readonly app: Application,
     private readonly layer: Container,
     private readonly ambientLayer: Container,
+    private readonly dayNightCycle?: DayNightCycle,
   ) {}
 
   async init(): Promise<void> {
@@ -27,6 +31,19 @@ export class AnimationController {
 
     this.ambientEffects = new AmbientEffects(this.ambientLayer);
     this.ambientEffects.init();
+
+    // Sync day/night cycle enabled state from store
+    if (this.dayNightCycle) {
+      this.dayNightCycle.enabled = useDayNightStore.getState().enabled;
+      this.unsubscribeDayNight = useDayNightStore.subscribe(
+        (state) => state.enabled,
+        (enabled) => {
+          if (this.dayNightCycle) {
+            this.dayNightCycle.enabled = enabled;
+          }
+        },
+      );
+    }
 
     this.unsubscribe = useOfficeStore.subscribe(
       (state) => state.agents,
@@ -43,6 +60,7 @@ export class AnimationController {
 
   destroy(): void {
     this.unsubscribe?.();
+    this.unsubscribeDayNight?.();
     if (this.ticker) {
       this.ticker.remove(this.onTick);
     }
@@ -55,6 +73,7 @@ export class AnimationController {
     }
     const agents = useOfficeStore.getState().agents;
     const deltaSeconds = ticker.deltaMS / 1000;
+    this.dayNightCycle?.update(deltaSeconds);
     this.ambientEffects?.update(deltaSeconds, agents);
     this.spriteManager.update(deltaSeconds, agents);
     this.updateAudioLoops(ticker.deltaMS, agents);

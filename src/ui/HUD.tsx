@@ -3,6 +3,8 @@ import { ConnectionStatus } from './ConnectionStatus.js';
 import { useOfficeStore } from '../state/useOfficeStore.js';
 import { useEventStore } from '../state/useEventStore.js';
 import { useAudioStore } from '../state/useAudioStore.js';
+import { useDayNightStore } from '../state/useDayNightStore.js';
+import { useThemeStore } from '../state/useThemeStore.js';
 import type { Agent, AgentState } from '../types/agent.js';
 import type { PixelEvent } from '../types/events.js';
 
@@ -141,6 +143,10 @@ export function HUD() {
   const audioVolume = useAudioStore((state) => state.volume);
   const toggleAudio = useAudioStore((state) => state.toggleEnabled);
   const setAudioVolume = useAudioStore((state) => state.setVolume);
+  const dayNightEnabled = useDayNightStore((state) => state.enabled);
+  const toggleDayNight = useDayNightStore((state) => state.toggleEnabled);
+  const themeLabel = useThemeStore((state) => state.theme.label);
+  const cycleTheme = useThemeStore((state) => state.cycleTheme);
   const count = agents.size;
   const allAgents = Array.from(agents.values()).slice(0, 10);
   const projectGroups = groupByProject(allAgents, agents);
@@ -235,11 +241,25 @@ export function HUD() {
             />
           ) : null}
           <button
+            className="daynight-toggle"
+            onClick={toggleDayNight}
+            title={dayNightEnabled ? 'Disable day/night cycle' : 'Enable day/night cycle'}
+          >
+            {dayNightEnabled ? 'D/N ON' : 'D/N OFF'}
+          </button>
+          <button
             className="notification-toggle"
             onClick={toggleNotifications}
             title={notificationsEnabled ? 'Disable notifications' : 'Enable notifications'}
           >
             {notificationsEnabled ? 'NOTIF ON' : 'NOTIF OFF'}
+          </button>
+          <button
+            className="daynight-toggle"
+            onClick={cycleTheme}
+            title="Cycle theme"
+          >
+            {themeLabel}
           </button>
           <ConnectionStatus />
         </div>

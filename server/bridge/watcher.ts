@@ -4,7 +4,10 @@ import { promises as fs } from 'node:fs';
 import chokidar, { type FSWatcher } from 'chokidar';
 import type { WatchLinePayload, WatchSessionPayload } from './types.js';
 
+/** For change events — file is actively being written to, generous window. */
 const RECENT_MS = 10 * 60 * 1000;
+/** For initial adds (server startup scan) — only show sessions that are very likely still active. */
+const INITIAL_RECENT_MS = 2 * 60 * 1000;
 
 function normalizePath(path: string): string {
   return path.replace(/\\/g, '/');
@@ -34,8 +37,8 @@ function isSessionJsonl(filePath: string): SessionJsonlResult {
   if (parts.length === 2) {
     return { valid: true, isSubAgent: false };
   }
-  // Match ~/.claude/projects/<project>/subagents/<session>.jsonl (sub-agent sessions)
-  if (parts.length === 3 && parts[1] === 'subagents') {
+  // Match ~/.claude/projects/<project>/<parent-session>/subagents/<session>.jsonl (sub-agent sessions)
+  if (parts.length === 4 && parts[2] === 'subagents') {
     return { valid: true, isSubAgent: true };
   }
   return { valid: false, isSubAgent: false };
@@ -92,7 +95,8 @@ export class SessionWatcher extends EventEmitter {
 
     try {
       const stat = await fs.stat(filePath);
-      if (Date.now() - stat.mtimeMs > RECENT_MS) {
+      const maxAge = isInitialAdd ? INITIAL_RECENT_MS : RECENT_MS;
+      if (Date.now() - stat.mtimeMs > maxAge) {
         return;
       }
 

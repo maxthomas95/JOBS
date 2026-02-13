@@ -1,0 +1,193 @@
+{
+  "name": "Default Office",
+  "gridWidth": 20,
+  "gridHeight": 15,
+  "tileSize": 16,
+  "tilesets": {
+    "room": {
+      "image": "Room_Builder_Office_16x16.png",
+      "tileSize": 16,
+      "columns": 16,
+      "tiles": {
+        "wall-face-l": { "col": 0, "row": 5 },
+        "wall-face": { "col": 1, "row": 5 },
+        "wall-face-r": { "col": 2, "row": 5 },
+        "wall-face-bot-l": { "col": 0, "row": 6 },
+        "wall-face-bot": { "col": 1, "row": 6 },
+        "wall-face-bot-r": { "col": 2, "row": 6 },
+        "floor-gray": { "col": 11, "row": 6 },
+        "door-open": { "col": 6, "row": 1 },
+        "door-frame": { "col": 6, "row": 0 }
+      }
+    },
+    "office": {
+      "image": "Modern_Office_16x16.png",
+      "tileSize": 16,
+      "columns": 16,
+      "tiles": {
+        "desk-beige-tl": { "col": 1, "row": 27 },
+        "desk-beige-tr": { "col": 2, "row": 27 },
+        "desk-beige-bl": { "col": 1, "row": 28 },
+        "desk-beige-br": { "col": 2, "row": 28 },
+        "desk-gray-tl": { "col": 4, "row": 27 },
+        "desk-gray-tr": { "col": 5, "row": 27 },
+        "desk-gray-bl": { "col": 4, "row": 28 },
+        "desk-gray-br": { "col": 5, "row": 28 },
+
+        "chair-gray-tl": { "col": 0, "row": 8 },
+        "chair-gray-tr": { "col": 1, "row": 8 },
+        "chair-orange-tl": { "col": 2, "row": 8 },
+        "chair-orange-tr": { "col": 3, "row": 8 },
+
+        "plant-big": { "col": 6, "row": 8 },
+        "plant-small": { "col": 6, "row": 10 },
+
+        "blue-monitor-tl": { "col": 12, "row": 12 },
+        "blue-monitor-tr": { "col": 13, "row": 12 },
+        "blue-monitor-bl": { "col": 12, "row": 13 },
+        "blue-monitor-br": { "col": 13, "row": 13 },
+        "blue-monitor2-tl": { "col": 14, "row": 12 },
+        "blue-monitor2-tr": { "col": 15, "row": 12 },
+        "blue-monitor2-bl": { "col": 14, "row": 13 },
+        "blue-monitor2-br": { "col": 15, "row": 13 },
+
+        "monitor-blue-1": { "col": 14, "row": 12 },
+        "monitor-blue-2": { "col": 15, "row": 12 },
+
+        "group-photo-tl": { "col": 0, "row": 12 },
+        "group-photo-tr": { "col": 1, "row": 12 },
+        "pennant-orange": { "col": 2, "row": 12 },
+        "pennant-yellow": { "col": 3, "row": 12 },
+        "hanging-plant-l": { "col": 4, "row": 12 },
+
+        "plant-pot-tl": { "col": 6, "row": 12 },
+        "plant-pot-tr": { "col": 7, "row": 12 },
+        "plant-pot-bl": { "col": 6, "row": 13 },
+        "plant-pot-br": { "col": 7, "row": 13 },
+
+        "printer-l": { "col": 10, "row": 12 },
+        "printer-r": { "col": 11, "row": 12 },
+
+        "art-frame-tl": { "col": 14, "row": 0 },
+        "art-frame-bl": { "col": 14, "row": 1 },
+
+        "server-tl": { "col": 0, "row": 23 },
+        "server-tr": { "col": 1, "row": 23 },
+        "server-bl": { "col": 0, "row": 24 },
+        "server-br": { "col": 1, "row": 24 }
+      }
+    }
+  },
+  "layers": [
+    {
+      "name": "floor",
+      "data": [
+        null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+        null, "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", null,
+        null, "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", null,
+        null, "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", null,
+        null, "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", null,
+        null, "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", null,
+        null, "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", null,
+        null, "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", null,
+        null, "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", null,
+        null, "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", null,
+        null, "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", null,
+        null, "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", null,
+        null, "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", null,
+        null, "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", "room:floor-gray", null,
+        null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null
+      ]
+    },
+    {
+      "name": "walls",
+      "data": [
+        "room:wall-face-l", "room:wall-face", "room:wall-face", "room:wall-face", "room:wall-face", "room:wall-face", "room:wall-face", "room:wall-face", "room:wall-face", "room:wall-face", "room:wall-face", "room:wall-face", "room:wall-face", "room:wall-face", "room:wall-face", "room:wall-face", "room:wall-face", "room:wall-face", "room:wall-face", "room:wall-face-r",
+        "room:wall-face-bot-l", "room:wall-face-bot", "room:wall-face-bot", "room:wall-face-bot", "room:wall-face-bot", "room:wall-face-bot", "room:wall-face-bot", "room:wall-face-bot", "room:wall-face-bot", "room:wall-face-bot", "room:wall-face-bot", "room:wall-face-bot", "room:wall-face-bot", "room:wall-face-bot", "room:wall-face-bot", "room:wall-face-bot", "room:wall-face-bot", "room:wall-face-bot", "room:wall-face-bot", "room:wall-face-bot-r",
+        null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+        null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+        null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+        null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+        null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+        null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+        null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+        null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+        null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+        null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+        null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+        null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+        "room:wall-face-l", "room:wall-face", "room:wall-face", "room:wall-face", "room:wall-face", "room:wall-face", "room:wall-face", "room:wall-face", "room:wall-face", "room:wall-face", "room:wall-face", "room:wall-face", "room:wall-face", "room:wall-face", "room:wall-face", "room:wall-face", "room:wall-face", "room:wall-face", "room:wall-face", "room:wall-face-r"
+      ]
+    },
+    {
+      "name": "furniture",
+      "data": [
+        null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+
+        null, "office:plant-pot-tl", "office:plant-pot-tr", "office:group-photo-tl", "office:group-photo-tr", "office:hanging-plant-l", "office:blue-monitor-tl", "office:blue-monitor-tr", null, "office:pennant-orange", "office:pennant-yellow", null, "office:art-frame-tl", null, "office:blue-monitor2-tl", "office:blue-monitor2-tr", null, "office:hanging-plant-l", "office:art-frame-tl", null,
+
+        null, "office:plant-pot-bl", "office:plant-pot-br", "office:monitor-blue-1", null, "office:monitor-blue-2", "office:blue-monitor-bl", "office:blue-monitor-br", "office:monitor-blue-1", null, null, "office:monitor-blue-2", "office:art-frame-bl", null, "office:blue-monitor2-bl", "office:blue-monitor2-br", null, null, "office:art-frame-bl", null,
+
+        null, null, "office:desk-beige-tl", "office:desk-beige-tr", null, "office:desk-beige-tl", "office:desk-beige-tr", null, "office:desk-gray-tl", "office:desk-gray-tr", null, "office:desk-beige-tl", "office:desk-beige-tr", null, "office:desk-gray-tl", "office:desk-gray-tr", null, null, null, null,
+
+        null, null, "office:desk-beige-bl", "office:desk-beige-br", null, "office:desk-beige-bl", "office:desk-beige-br", null, "office:desk-gray-bl", "office:desk-gray-br", null, "office:desk-beige-bl", "office:desk-beige-br", null, "office:desk-gray-bl", "office:desk-gray-br", null, null, null, null,
+
+        null, null, "office:chair-gray-tl", "office:chair-gray-tr", null, "office:chair-orange-tl", "office:chair-orange-tr", null, "office:chair-gray-tl", "office:chair-gray-tr", null, "office:chair-orange-tl", "office:chair-orange-tr", null, "office:chair-gray-tl", "office:chair-gray-tr", null, null, null, null,
+
+        null, null, null, "office:monitor-blue-1", null, "office:monitor-blue-2", null, null, null, "office:monitor-blue-1", null, "office:monitor-blue-2", null, null, null, "office:monitor-blue-1", null, null, null, null,
+
+        null, null, "office:desk-gray-tl", "office:desk-gray-tr", null, "office:desk-beige-tl", "office:desk-beige-tr", null, "office:desk-beige-tl", "office:desk-beige-tr", null, "office:desk-gray-tl", "office:desk-gray-tr", null, "office:desk-beige-tl", "office:desk-beige-tr", null, null, null, null,
+
+        null, null, "office:desk-gray-bl", "office:desk-gray-br", null, "office:desk-beige-bl", "office:desk-beige-br", null, "office:desk-beige-bl", "office:desk-beige-br", null, "office:desk-gray-bl", "office:desk-gray-br", null, "office:desk-beige-bl", "office:desk-beige-br", null, null, null, null,
+
+        null, null, "office:chair-orange-tl", "office:chair-orange-tr", null, "office:chair-gray-tl", "office:chair-gray-tr", null, "office:chair-orange-tl", "office:chair-orange-tr", null, "office:chair-gray-tl", "office:chair-gray-tr", null, "office:chair-orange-tl", "office:chair-orange-tr", null, null, null, null,
+
+        null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+
+        null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, "office:plant-big", null,
+
+        null, "office:server-tl", "office:server-tr", null, null, "office:printer-l", "office:printer-r", null, "office:plant-pot-tl", "office:plant-pot-tr", null, null, null, null, null, null, null, null, "office:plant-small", null,
+
+        null, "office:server-bl", "office:server-br", null, null, null, null, null, "office:plant-pot-bl", "office:plant-pot-br", null, null, null, null, null, null, null, "room:door-open", null, null,
+
+        null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null
+      ]
+    }
+  ],
+  "walkability": [
+    false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false,
+    false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false,
+    false, true,  true,  true,  true,  true,  false, false, true,  true,  true,  true,  true,  true,  true,  true,  false, false, true,  false,
+    false, true,  false, false, true,  false, false, true,  false, false, true,  false, false, true,  false, false, true,  true,  true,  false,
+    false, true,  false, false, true,  false, false, true,  false, false, true,  false, false, true,  false, false, true,  true,  true,  false,
+    false, true,  false, false, true,  false, false, true,  false, false, true,  false, false, true,  false, false, true,  true,  true,  false,
+    false, true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  false,
+    false, true,  false, false, true,  false, false, true,  false, false, true,  false, false, true,  false, false, true,  true,  true,  false,
+    false, true,  false, false, true,  false, false, true,  false, false, true,  false, false, true,  false, false, true,  true,  true,  false,
+    false, true,  false, false, true,  false, false, true,  false, false, true,  false, false, true,  false, false, true,  true,  true,  false,
+    false, true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  false,
+    false, true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  false,
+    false, false, false, true,  true,  false, false, true,  false, false, true,  false, false, true,  true,  true,  true,  true,  false, false,
+    false, false, false, true,  true,  true,  true,  true,  false, false, true,  false, false, true,  true,  true,  true,  true,  true,  false,
+    false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false
+  ],
+  "stations": {
+    "door": { "x": 17, "y": 13 },
+    "whiteboard": { "x": 7, "y": 3 },
+    "terminal": { "x": 2, "y": 11 },
+    "library": { "x": 16, "y": 2 },
+    "coffee": { "x": 10, "y": 11 },
+    "desks": [
+      { "x": 2, "y": 5 },
+      { "x": 5, "y": 5 },
+      { "x": 8, "y": 5 },
+      { "x": 11, "y": 5 },
+      { "x": 14, "y": 5 },
+      { "x": 2, "y": 9 },
+      { "x": 5, "y": 9 },
+      { "x": 8, "y": 9 },
+      { "x": 11, "y": 9 },
+      { "x": 14, "y": 9 }
+    ]
+  }
+}

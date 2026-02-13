@@ -27,19 +27,17 @@ function buildGrid(): PF.Grid {
     grid.setWalkableAt(desk.x + 1, desk.y, false);
   }
 
-  // Whiteboard — 3 tiles wide
+  // Whiteboard — 2 tiles wide
   grid.setWalkableAt(STATIONS.whiteboard.x, STATIONS.whiteboard.y, false);
   grid.setWalkableAt(STATIONS.whiteboard.x + 1, STATIONS.whiteboard.y, false);
-  grid.setWalkableAt(STATIONS.whiteboard.x + 2, STATIONS.whiteboard.y, false);
 
   // Terminal — 2 tiles wide
   grid.setWalkableAt(STATIONS.terminal.x, STATIONS.terminal.y, false);
   grid.setWalkableAt(STATIONS.terminal.x + 1, STATIONS.terminal.y, false);
 
-  // Library — 3 tiles wide
+  // Library — 2 tiles wide
   grid.setWalkableAt(STATIONS.library.x, STATIONS.library.y, false);
   grid.setWalkableAt(STATIONS.library.x + 1, STATIONS.library.y, false);
-  grid.setWalkableAt(STATIONS.library.x + 2, STATIONS.library.y, false);
 
   // Coffee machine — 2 tiles wide
   grid.setWalkableAt(STATIONS.coffee.x, STATIONS.coffee.y, false);
@@ -48,10 +46,31 @@ function buildGrid(): PF.Grid {
   return grid;
 }
 
-const baseGrid = buildGrid();
+/**
+ * Build a grid from a flat walkability array (from map config).
+ */
+function buildGridFromWalkability(walkability: boolean[], gridW: number, gridH: number): PF.Grid {
+  const grid = new PF.Grid(gridW, gridH);
+  for (let y = 0; y < gridH; y++) {
+    for (let x = 0; x < gridW; x++) {
+      grid.setWalkableAt(x, y, walkability[y * gridW + x]);
+    }
+  }
+  return grid;
+}
+
+let baseGrid = buildGrid();
 const finder = new PF.AStarFinder({
   diagonalMovement: PF.DiagonalMovement.Never,
 });
+
+/**
+ * Rebuild the pathfinding grid from map config walkability data.
+ * Called at startup after setStationsFromConfig.
+ */
+export function setWalkabilityFromConfig(walkability: boolean[], gridW: number, gridH: number): void {
+  baseGrid = buildGridFromWalkability(walkability, gridW, gridH);
+}
 
 /**
  * Convert a world-coordinate position to a tile coordinate, clamped to the walkable area.

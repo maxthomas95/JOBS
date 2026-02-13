@@ -46,25 +46,53 @@ export interface Agent {
 
 export const TILE_SIZE = 16;
 
-export const STATIONS = {
+/** Station positions — mutable so they can be updated from map config at startup. */
+export const STATIONS: {
+  door: Point;
+  whiteboard: Point;
+  terminal: Point;
+  library: Point;
+  coffee: Point;
+  desks: Point[];
+} = {
   door: { x: 17, y: 13 },
-  whiteboard: { x: 2, y: 2 },
-  terminal: { x: 2, y: 12 },
+  whiteboard: { x: 6, y: 2 },
+  terminal: { x: 1, y: 12 },
   library: { x: 16, y: 2 },
   coffee: { x: 9, y: 12 },
   desks: [
-    { x: 2, y: 6 },
-    { x: 5, y: 6 },
-    { x: 8, y: 6 },
-    { x: 11, y: 6 },
-    { x: 14, y: 6 },
-    { x: 2, y: 9 },
-    { x: 5, y: 9 },
-    { x: 8, y: 9 },
-    { x: 11, y: 9 },
-    { x: 14, y: 9 },
+    { x: 3, y: 4 },
+    { x: 6, y: 4 },
+    { x: 9, y: 4 },
+    { x: 12, y: 4 },
+    { x: 15, y: 4 },
+    { x: 3, y: 8 },
+    { x: 6, y: 8 },
+    { x: 9, y: 8 },
+    { x: 12, y: 8 },
+    { x: 15, y: 8 },
   ],
-} as const;
+};
+
+/**
+ * Update STATIONS from a map config's station positions.
+ * Called at startup from PixelOffice before any rendering.
+ */
+export function setStationsFromConfig(stations: {
+  door: Point;
+  whiteboard: Point;
+  terminal: Point;
+  library: Point;
+  coffee: Point;
+  desks: Point[];
+}): void {
+  STATIONS.door = stations.door;
+  STATIONS.whiteboard = stations.whiteboard;
+  STATIONS.terminal = stations.terminal;
+  STATIONS.library = stations.library;
+  STATIONS.coffee = stations.coffee;
+  STATIONS.desks = [...stations.desks];
+}
 
 export function tileToWorld(point: Point): Point {
   return {
