@@ -24,8 +24,9 @@ Part of the Jarvis AI assistant ecosystem.
 | **Agent Source (v1)** | Claude Code sessions | Via extracted pixelhq-bridge core modules |
 | **Deployment** | Self-hosted Docker on Proxmox | docker-compose, single `docker compose up` |
 | **Priority Order** | 1. Live data mapping → 2. Multi-agent → 3. Visuals → 4. Customization | Function over form |
-| **Sprites (v1)** | a16z/ai-town MIT sprites (8 characters w/ walk cycles) | Free, already TypeScript-defined, swap later |
-| **Sprites (v1.5)** | LimeZu Modern Office tileset + PixelLab.ai custom characters | $2.50 tileset + AI-generated office workers |
+| **Sprites (v1)** | Clawdachi GIF blob via @pixi/gif (replaced ai-town sprites) | Expressive, state-aware character from MIT Clawdachi project |
+| **Tileset (v2-M5)** | LimeZu Modern Office tileset (private use), free default for GitHub | Paid tileset for personal setup; open-source default before publishing |
+| **Sprites (v2)** | Clawdachi programmatic renderer (moonshot) | State-aware expressions, per-agent palettes, no external asset deps |
 | **Bridge Strategy** | Extract core modules (watcher, parser, adapter, events) | ~4 files, skip iOS-specific code (Bonjour, auth) |
 | **Audio** | Yes — ambient office sounds + retro chimes | freesound.org CC0 + jsfxr |
 
@@ -515,24 +516,24 @@ open http://your-proxmox-host:8780
 - **Deliverable:** Sounds you'd actually want to leave on
 
 ### v2-M5: Visual Upgrade — "Make it gorgeous"
-> Replace placeholder graphics with proper pixel art.
+> Replace placeholder graphics with proper pixel art. Character sprites are covered by the Clawdachi Sprite System moonshot — this milestone focuses on the office environment.
 
-- [ ] **LimeZu Modern Office tileset** ($2.50, commercial use OK)
+- [ ] **LimeZu Modern Office tileset** ($2.50, personal use — not redistributable)
   - Proper desks, chairs, computers, bookshelves, coffee area
   - Wall decorations, plants, windows
-  - Configurable via JSON tileset config
-- [ ] **PixelLab.ai custom sprites** — AI-generated office worker characters
-  - More than 8 characters, diverse appearances
-  - Richer animation states (sitting, typing, standing, walking, gesturing)
-  - Idle animations per station (not just direction + bob)
+  - Tileset loader: parse sprite sheet into PixiJS textures, map tile IDs to positions
+- [ ] **JSON-driven tilemap config** — decouple layout from rendering
+  - Tile-level map definition: `{ tileId, x, y }` array defining the office
+  - Station positions derived from map config (replace hardcoded STATIONS)
+  - Tileset-agnostic: same map config works with LimeZu images or programmatic fallback
 - [ ] **Day/night cycle** — office lighting shifts based on real time of day
-- [ ] **Customizable office layouts** — JSON-driven tileset config
-  - Users can rearrange desks, add rooms, resize office
+- [ ] **Customizable office layouts** — preset and user-defined
+  - Users can rearrange desks, add rooms, resize office via JSON
   - Preset layouts: startup (open plan), corporate (cubicles), cozy (small team)
 - [ ] **Theme support**
   - Dark office (default), bright startup, cyberpunk neon, retro terminal green
   - Affects tilemap colors, HUD styling, ambient lighting
-- **Deliverable:** Screenshot-worthy pixel art office
+- **Deliverable:** Screenshot-worthy pixel art office (LimeZu for personal use)
 
 ### v2-M6: Dashboard & Integrations — "Beyond Claude Code"
 > Turn J.O.B.S. into a persistent operational dashboard.
@@ -552,6 +553,66 @@ open http://your-proxmox-host:8780
 - [ ] **Multi-instance support** — watch multiple machines' Claude dirs
   - Aggregate sessions from multiple dev machines into one office
 - **Deliverable:** A living, always-on dashboard for your AI operations
+
+---
+
+## Planned Features (Post-v2)
+
+> Not moonshots — these are concrete, scoped features planned for public release. The kind of polish that makes J.O.B.S. usable by someone who isn't you.
+
+### Settings Menu — "Let me tweak that"
+> A proper settings panel so users can tune the experience to their liking.
+
+- [ ] **Settings panel UI** — slide-out or modal, accessible from Controls bar
+  - Pixel-art styled panel consistent with HUD aesthetic
+  - Organized into sections: Audio, Display, Notifications
+- [ ] **Per-sound volume sliders** — individual control over every sound category
+  - Loops: keyboard typing, terminal typing, page turning, paper rustling, coffee brew, ambient hum, footsteps
+  - One-shots: door bell, error alert, task complete, waiting ping, check-in ping, delegation chime
+  - Master volume slider at the top, individual sliders below
+  - Each sound has a mute toggle alongside its slider
+- [ ] **Persist settings** — save all preferences to localStorage
+  - Extend existing useAudioStore persistence to include per-sound volumes/mutes
+  - Settings survive page refresh and reconnection
+- **Deliverable:** Full control over the soundscape — kill the hum, crank the chimes, whatever you want
+
+### Open-Source Tileset — "Ship it without a lawsuit"
+> Before publishing on GitHub, create a free default tileset so the repo works out of the box without paid assets.
+
+- [ ] **Upgraded programmatic tilemap** — replace colored rectangles with detailed code-drawn pixel art
+  - Patterned floor tiles, desk details (monitors, keyboards, mugs), wall textures
+  - Bookshelf spines, coffee machine detail, terminal screen glow
+  - All drawn via PixiJS Graphics — zero external image assets, zero licensing concerns
+- [ ] **Tileset abstraction layer** — same JSON map config renders with either backend
+  - Programmatic renderer: built-in, ships with repo (default)
+  - Image renderer: loads LimeZu (or any compatible) sprite sheet when present in `src/assets/tiles/`
+  - Auto-detect: if tileset images exist use them, otherwise fall back to programmatic
+- [ ] **LimeZu as optional premium skin** — documented upgrade path
+  - README instructions: "Buy LimeZu Modern Office ($2.50), drop into `src/assets/tiles/`"
+  - Tileset never committed to repo — `.gitignore` entry for image tilesets
+  - JSON map config is identical for both renderers
+- **Deliverable:** Repo works and looks good out of the box; LimeZu is a documented optional upgrade
+
+### GitHub Publishing — "Open the doors"
+> Everything needed to make J.O.B.S. a proper open-source project that anyone can clone and run.
+
+- [ ] **LICENSE file** — MIT (matches all dependencies and extracted code)
+- [ ] **Asset audit** — verify all bundled assets are redistributable
+  - Audio: CC0 from freesound.org (safe)
+  - Claude GIF sprite: MIT from Clawdachi (safe)
+  - Tileset: programmatic default only (safe), LimeZu excluded via .gitignore
+- [ ] **README for external users** — setup, config, architecture overview
+  - Clear "Quick Start" section: clone, install, `docker compose up`
+  - Document environment variables and optional config
+  - Screenshots / GIF demo of the running office
+  - "Optional: Premium Tileset" section with LimeZu instructions
+- [ ] **Strip machine-specific config** — ensure no hardcoded paths or personal details
+  - All paths use environment variables (`CLAUDE_DIR`, `PORT`)
+  - No references to personal Proxmox setup in committed config
+- [ ] **Contributing guide** — basic PR/issue guidelines
+- **Deliverable:** `git clone` → `docker compose up` → working pixel office, for anyone
+
+---
 
 ### Moonshot: Live Terminal View
 > Click a sprite, see its live session — a visual Claude Code dashboard.
@@ -579,6 +640,135 @@ open http://your-proxmox-host:8780
   - Essentially a remote Claude Code client embedded in J.O.B.S.
 - **Deliverable:** Full visibility into any agent's session, from the office view
 
+### Moonshot: Clawdachi Sprite System — "Give them personality"
+> Replace generic walking sprites with expressive, state-aware Clawdachi blobs that visually communicate what each agent is doing.
+>
+> **Inspiration:** [gonzchris/Clawdachi](https://github.com/gonzchris/Clawdachi) (MIT) — a macOS desktop companion that monitors Claude Code and reacts with pixel-art animations. The character is a 32x32 orange blob with rich expression states (thinking, planning, celebrating), particle effects (floating math symbols, lightbulb sparkles, confetti), and customizable accessories (hats, glasses, held items). All art is programmatically generated in Swift/SpriteKit via pixel matrices.
+>
+> **Current state:** Base Clawdachi GIF already integrated as the agent sprite via `@pixi/gif`. Single animation loop for all states. Agents move, pathfind, and interact using the existing blob — just no state differentiation yet.
+>
+> **Constraint:** No macOS available — cannot run the Swift app to export assets. All work must be reproducible on Windows using PixiJS, Canvas API, or manually-authored assets.
+
+#### Phase 1: State-Specific Particle Effects (PixiJS overlays on existing GIF)
+> Keep the base GIF blob. Layer PixiJS particle/graphic effects on top to differentiate agent states — the same approach Clawdachi uses in SpriteKit.
+
+- [ ] **Per-agent effect container** — child Container attached to each AgentVisual, positioned above the sprite
+  - Manages lifecycle: create on addAgent, destroy on removeAgent
+  - Swaps active effect when agent state changes (via AnimationController state transition detection)
+- [ ] **Thinking effect** — floating symbols rising and fading above the blob
+  - Pool of characters (`+`, `−`, `×`, `=`, `%`, `?`, `!`, `∑`, `λ`) rendered as BitmapText or small Graphics
+  - Spawn at random horizontal offsets, rise in gentle sine-wave arc, fade out over ~2s
+  - 2-3 symbols visible at once, staggered spawn timing
+- [ ] **Planning effect** — lightbulb with pulsing sparkles
+  - Small lightbulb graphic (yellow fill, white highlight) floating above head
+  - Tiny spark particles that pop in at random positions around the bulb, hold briefly, fade
+  - Gentle vertical bob on the bulb itself
+- [ ] **Waiting/idle effect** — question mark or ellipsis bob
+  - `"?"` or `"..."` floating above head with slow vertical oscillation
+  - Pop-in animation on state enter, fade-out on state exit
+- [ ] **Coding/typing effect** — subtle screen glow + keystroke particles
+  - Tiny bright dots emitting forward from the blob toward the desk (simulating keystrokes hitting screen)
+  - Pairs with existing desk glow from AmbientEffects
+- [ ] **Terminal effect** — command prompt indicator
+  - `"> _"` text with blinking cursor above head
+  - Green tint on the text for terminal aesthetic
+- [ ] **Searching effect** — magnifying glass sweep
+  - Small magnifying glass graphic that sways left-right above the blob
+  - Optional: tiny book/page particles floating nearby
+- [ ] **Error effect** — alarm burst
+  - `"!"` or `"✕"` with red flash burst, existing red tint on sprite stays
+  - Brief shake on the effect container (not the sprite, to avoid path desync)
+- [ ] **Celebrating effect** — confetti burst
+  - On task-complete or session-end, spray of colored pixel particles upward
+  - Particles arc outward and downward with gravity, fade on landing
+  - Pairs with existing `task-complete` audio one-shot
+- [ ] **Effect transitions** — smooth crossfade between states
+  - Outgoing effect fades out over 0.3s, incoming effect fades in
+  - Prevents jarring pops when state changes rapidly
+- **Deliverable:** Each blob visually communicates its current state without needing to read the HUD
+
+#### Phase 2: Programmatic Sprite Renderer (port Swift pixel matrices to TypeScript)
+> Full port of the Clawdachi rendering system. Generate sprite textures at runtime from pixel matrices, enabling expressions, outfits, and per-agent customization — all without needing macOS.
+
+- [ ] **PixelArtGenerator.ts** — TypeScript equivalent of Clawdachi's `PixelArtGenerator.swift`
+  - Accept 2D array of RGBA pixel data, render to offscreen Canvas
+  - Convert to PixiJS Texture via `Texture.from(canvas)`
+  - Nearest-neighbor filtering (`scaleMode: 'nearest'`) for crisp pixel art
+- [ ] **ClawdachiBody.ts** — body sprite generation from pixel matrices
+  - Port the 32x32 body shape with primary/shadow/highlight orange layers
+  - Breathing animation: 4 frames via width/offset adjustments
+  - Arm and leg sub-sprites (3x3 and 2x5 pixel blocks)
+- [ ] **ClawdachiFace.ts** — expression system
+  - 5 eye states: open, half-closed, closed, squint, squint-left
+  - Mouth variants: smile, whistle, yawn, speaking-open, speaking-closed
+  - Blink animation: 5-frame sequence (open → half → closed → half → open)
+  - Map agent states to expressions: thinking=squint, coding=open+focused, error=squint, idle=blink cycle
+- [ ] **ClawdachiPalette.ts** — color system for per-agent differentiation
+  - Base palette: primary, shadow, highlight (orange default)
+  - Alternative palettes for multi-agent: blue, green, purple, pink, red, teal, etc.
+  - Assign palette per agent (replace characterIndex color-swap system)
+- [ ] **ClawdachiOutfits.ts** — accessories and held items (stretch goal)
+  - Hats: cowboy, top hat, beanie, propeller cap
+  - Glasses: sunglasses, nerd glasses, 3D glasses
+  - Held items: coffee mug, headphones
+  - Supervisor differentiation: special hat or badge overlay
+- [ ] **AnimatedClawdachi class** — replaces AnimatedGIF per agent
+  - Composites body + face + outfit layers into a single Container
+  - Tick-driven animation: breathing cycle, blink timer, expression changes
+  - State-reactive: swap expression/pose based on agent state
+  - Generates textures on-demand, caches per palette+expression combo
+- [ ] **Transition from GIF to programmatic** — swap rendering backend
+  - Feature flag: `CLAWDACHI_RENDERER=gif|programmatic` (default: gif)
+  - Programmatic renderer produces same visual footprint (32x32, same anchor/positioning)
+  - Phase 1 particle effects work identically with either renderer
+- **Deliverable:** Fully expressive, customizable blob characters — no external asset dependencies, infinite palette variations, state-driven expressions
+
+### Moonshot: Live Room Editor — "Make it yours"
+> A WYSIWYG editor built into the office. Hit "Edit," drag furniture around, and the agents figure out the rest. Pathfinding grid regenerates on the fly so characters always know how to reach every station — no matter how weird your layout gets.
+>
+> **Why moonshot:** This touches nearly every system — tilemap rendering, station positions, pathfinding grid, collision data, layout persistence, and a full drag-and-drop UI layer. Each piece is tractable; the integration surface is what makes it big.
+
+- [ ] **Edit mode toggle** — toolbar button or hotkey to enter/exit layout editing
+  - Overlay grid lines on the tilemap showing the pathfinding grid
+  - Agents freeze in place while editing (pause animation controller)
+  - Visual indicator: "EDITING" badge, dimmed HUD, highlighted grid
+  - Exit edit mode: agents resume, pathfinding recalculates, positions validate
+- [ ] **Furniture palette** — sidebar panel listing placeable objects
+  - Categories: Desks, Stations (whiteboard, terminal, library, coffee), Decor (plants, shelves, rugs), Walls/Doors
+  - Each item shows: sprite preview, tile footprint (e.g., 2x1), station type (if any)
+  - Drag from palette onto grid, or click-to-place
+- [ ] **Drag-and-drop placement** — move furniture on the tile grid
+  - Snap to grid (16px tiles), ghost preview while dragging
+  - Collision detection: red highlight if overlapping another object or blocking the only path to a station
+  - Rotate furniture (90° increments) where applicable
+  - Delete: drag to trash or right-click → remove
+- [ ] **Dynamic pathfinding rebuild** — A* grid updates live as furniture moves
+  - Mark tiles as walkable/blocked based on placed furniture footprints
+  - Recompute walkability grid on every placement/removal
+  - Validation pass: ensure every station is reachable from the door — block placement if it would strand a station
+  - Visual feedback: briefly flash unreachable tiles in red if a placement fails validation
+- [ ] **Station auto-registration** — placing a "desk" or "terminal" furniture piece auto-registers it as a station
+  - Station type inferred from furniture type (desk furniture = desk station, terminal furniture = terminal station, etc.)
+  - Agent-facing position auto-detected from furniture orientation (chair side of desk)
+  - Desk numbering auto-assigned (D1, D2, ... in placement order)
+  - Removing a station with an assigned agent: agent walks to nearest available station of the same type, or to the door if none
+- [ ] **Layout persistence** — save/load room configurations
+  - Save to localStorage (quick) and exportable as JSON file
+  - Layout JSON schema: `{ tiles: [...], furniture: [...], stations: [...], meta: { name, gridSize } }`
+  - Import/export buttons in the editor toolbar
+  - Default layout ships with the app (current hardcoded layout as JSON)
+- [ ] **Preset layouts** — bundled room templates to start from
+  - "Classic" (current 10-desk layout), "Startup" (open plan, bean bags), "Corporate" (cubicle rows), "Cozy" (small 4-desk team room)
+  - "Load Preset" dropdown in editor, overwrites current layout (with confirmation)
+- [ ] **Undo/redo** — edit history stack
+  - Ctrl+Z / Ctrl+Y (or toolbar buttons) to step through placement history
+  - Stack clears on exit edit mode
+- [ ] **Multi-floor / room resize** (stretch goal) — expand beyond 20x15
+  - Drag canvas edges to resize the grid (max cap TBD, performance-dependent)
+  - Multiple rooms connected by doors (each room is a separate grid, door tiles link them)
+  - Agents pathfind across rooms via door transitions
+- **Deliverable:** Your office, your rules — drag desks, rearrange stations, and the little guys figure it out
+
 ---
 
 ## References
@@ -592,6 +782,6 @@ open http://your-proxmox-host:8780
 | Howler.js | howlerjs.com | MIT |
 | pathfinding (npm) | npmjs.com/package/pathfinding | MIT |
 | xterm.js | xtermjs.org | MIT |
-| LimeZu Modern Office (v1.5) | limezu.itch.io/modernoffice | Commercial use OK |
-| PixelLab.ai (v2 sprites) | pixellab.ai | Subscription |
+| LimeZu Modern Office (v2-M5) | limezu.itch.io/modernoffice | Paid, not redistributable — personal use only, not bundled in repo |
 | freesound.org (audio) | freesound.org | CC0 |
+| Clawdachi (sprite inspiration) | github.com/gonzchris/Clawdachi | MIT |
