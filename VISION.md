@@ -558,6 +558,27 @@ open http://your-proxmox-host:8780
   - Shared session manager — agent lifecycle is provider-agnostic, just needs a new event source
 - **Deliverable:** A living, always-on dashboard for your AI operations — provider-agnostic
 
+### v2-M7: Stabilization & Polish — "Make it bulletproof"
+> Freeze features. Hunt every bug, smooth every edge, answer every "wait, why does it do that?" before moving on.
+
+- [ ] **Bug fixes & edge cases** — populate as discovered during daily use
+- [ ] **Performance profiling** — memory leaks, ticker efficiency, WebSocket reconnect reliability
+- [ ] **UX paper cuts** — anything that feels janky or unintuitive
+- [ ] **Real-world stress testing** — long-running sessions, rapid agent churn, 10 simultaneous agents, browser tab sleep/wake
+- [ ] **Documentation pass** — make sure README reflects the actual current state
+- **Deliverable:** A rock-solid daily driver — zero surprises
+
+### v2-M8: Security Remediation — "Lock it down"
+> Audit before anyone else ever touches this.
+
+- [ ] **WebSocket authentication** — currently open, anyone on the network can connect
+- [ ] **Input sanitization audit** — event data hitting the DOM (XSS surface in agent names, tool names, bubble text)
+- [ ] **Rate limiting / connection limits** on the WS server
+- [ ] **Docker hardening** — non-root user, read-only filesystem where possible
+- [ ] **Dependency audit** — `npm audit`, prune unused deps
+- [ ] **Content Security Policy headers** for the static server
+- **Deliverable:** Production-safe for network exposure — ready for public release prep
+
 ---
 
 ## Planned Features (Post-v2)
