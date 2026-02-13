@@ -58,7 +58,21 @@ if (useMock) {
     wsServer.broadcastSnapshot();
   });
 
-  watcher.on('line', ({ line, sessionId, agentId }) => {
+  watcher.on('line', ({ line, sessionId, agentId, filePath }) => {
+    // Re-register if session was evicted but file is still active
+    if (!sessionManager.hasSession(sessionId)) {
+      // eslint-disable-next-line no-console
+      console.log(`[watcher] re-registering evicted session ${sessionId}`);
+      sessionManager.registerSession(sessionId, filePath);
+      const restarted = createSessionEvent(sessionId, 'started', {
+        agentId,
+        project: filePath,
+        source: 'watcher',
+      });
+      sessionManager.handleEvent(restarted);
+      wsServer.broadcast(restarted);
+      wsServer.broadcastSnapshot();
+    }
     const raw = parseJsonlLine(line, sessionId, agentId);
     if (!raw) {
       return;
