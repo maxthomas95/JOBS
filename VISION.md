@@ -543,7 +543,7 @@ open http://your-proxmox-host:8780
 ### v2-M6: Dashboard & Integrations — "Beyond Claude Code"
 > Turn J.O.B.S. into a persistent operational dashboard. JSONL watching remains the zero-config foundation; hooks and webhooks layer on top for richer, lower-latency data when available.
 
-- [ ] **Claude Code hooks integration** — optional enhanced mode via Claude Code's hook system
+- [x] **Claude Code hooks integration** — optional enhanced mode via Claude Code's hook system
   - **Hybrid architecture:** JSONL file watching stays as the primary, zero-config path. Hooks are an additive layer that fills gaps JSONL physically cannot — no breaking changes, pure enhancement
   - **Hook receiver endpoint** — `POST /api/hooks` on the existing Express server (port 8780)
     - Accepts hook JSON payloads, routes through session-manager like JSONL events
@@ -571,11 +571,11 @@ open http://your-proxmox-host:8780
     - Hooks are a newer, evolving API — the event set has changed significantly in recent months. JSONL format is stable
     - If a hook script fails/crashes, JSONL files still persist on disk as the safety net
     - Not all environments support hooks (older Claude Code versions, restricted setups)
-- [ ] **Persistent stats dashboard**
+- [x] **Persistent stats dashboard**
   - Sessions today, total session hours, files touched, tools used breakdown
   - Per-agent history: past sessions, average duration, most-used tools
   - Stored in SQLite or JSON file, survives restarts
-- [ ] **"Screensaver mode"** for wall-mounted displays
+- [x] **"Screensaver mode"** for wall-mounted displays
   - Auto-zoom to active area, hide HUD when idle, cinematic camera pans
   - Show ambient stats overlay (sessions today, uptime)
   - Perfect for office TV or Proxmox display

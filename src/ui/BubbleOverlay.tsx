@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
 import { useOfficeStore } from '../state/useOfficeStore.js';
-import { spritePositions, supervisorCheckIns } from '../engine/AgentSprite.js';
+import { spritePositions, supervisorCheckIns, worldTransform } from '../engine/AgentSprite.js';
 import type { Agent, AgentState } from '../types/agent.js';
 
 const STATE_COLORS: Record<string, string> = {
@@ -120,8 +120,10 @@ export function BubbleOverlay({ canvasRef }: { canvasRef: React.RefObject<HTMLCa
         const overlayRect = overlay.getBoundingClientRect();
         const offsetX = rect.left - overlayRect.left;
         const offsetY = rect.top - overlayRect.top;
-        const scaleX = rect.width / 320;
-        const scaleY = rect.height / 240;
+        // Account for the world container's transform (screensaver zoom/pan)
+        const wt = worldTransform;
+        const cssScaleX = rect.width / 320;
+        const cssScaleY = rect.height / 240;
 
         for (const child of overlay.children) {
           const el = child as HTMLElement;
@@ -130,8 +132,12 @@ export function BubbleOverlay({ canvasRef }: { canvasRef: React.RefObject<HTMLCa
           const pos = spritePositions.get(id);
           if (pos) {
             const yOffset = Number(el.dataset.offsetY ?? -20);
-            el.style.left = `${offsetX + pos.x * scaleX}px`;
-            el.style.top = `${offsetY + (pos.y + yOffset) * scaleY}px`;
+            // Convert world coords → screen coords via stage transform
+            const screenX = (pos.x - wt.pivotX) * wt.scaleX + wt.posX;
+            const screenY = ((pos.y + yOffset) - wt.pivotY) * wt.scaleY + wt.posY;
+            // Convert PixiJS screen coords → CSS coords
+            el.style.left = `${offsetX + screenX * cssScaleX}px`;
+            el.style.top = `${offsetY + screenY * cssScaleY}px`;
           }
         }
       }

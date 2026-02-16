@@ -54,12 +54,32 @@ function assistantEvents(raw: RawJsonlEvent): PixelEvent[] {
   const blocks = raw.message?.content ?? [];
   const events: PixelEvent[] = [];
 
+  // Check what block types are present to determine the best activity state.
+  // A single JSONL line contains ALL blocks from one turn (thinking + text + tool_use).
+  // Tool events are always emitted (for stats + state), but activity events (thinking/responding)
+  // are only emitted when there are no tool_use blocks — otherwise the tool events already
+  // set the correct state and the activity events would just fight them.
+  let hasToolUse = false;
+  for (const block of blocks) {
+    if ((block as RawContentBlock).type === 'tool_use') {
+      hasToolUse = true;
+      break;
+    }
+  }
+
   for (const block of blocks) {
     const parsed = block as RawContentBlock;
     if (parsed.type === 'thinking') {
-      events.push(createActivityEvent(sessionId, agentId, timestamp, 'thinking'));
+      // Only emit thinking activity if there are no tool_use blocks in this message.
+      // When tools are present, the tool events determine the agent's state.
+      if (!hasToolUse) {
+        events.push(createActivityEvent(sessionId, agentId, timestamp, 'thinking'));
+      }
     } else if (parsed.type === 'text') {
-      events.push(createActivityEvent(sessionId, agentId, timestamp, 'responding'));
+      // Only emit responding activity if there are no tool_use blocks.
+      if (!hasToolUse) {
+        events.push(createActivityEvent(sessionId, agentId, timestamp, 'responding'));
+      }
     } else if (parsed.type === 'tool_use') {
       const tool = parsed.name ?? 'unknown_tool';
       const context = extractSafeContext(tool, parsed.input);

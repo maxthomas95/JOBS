@@ -190,12 +190,28 @@ export class SessionManager {
     }
 
     agent.lastEventAt = event.timestamp || Date.now();
-    // Clear waiting-for-human on any new event (agent is active again)
-    if (agent.waitingForHuman) {
+
+    // When hooks have deterministically set waiting state, ignore stale JSONL events
+    // from the same turn. Only user_prompt (new human message) or session events can wake up.
+    if (agent.hookActive && agent.waitingForHuman) {
+      if (event.type === 'activity' && event.action === 'user_prompt') {
+        // New human message — wake up and proceed
+        agent.waitingForHuman = false;
+        agent.waitingSince = undefined;
+      } else if (event.type === 'session') {
+        // Session lifecycle — proceed
+        agent.waitingForHuman = false;
+        agent.waitingSince = undefined;
+      } else {
+        // Stale JSONL event from the same turn — ignore
+        return;
+      }
+    } else if (agent.waitingForHuman) {
+      // Non-hook agent: clear waiting on any new event
       agent.waitingForHuman = false;
       agent.waitingSince = undefined;
-      agent.hookActive = false;
     }
+
     const desk = agent.deskIndex === null ? STATIONS.whiteboard : STATIONS.desks[agent.deskIndex];
 
     if (event.type === 'session') {
@@ -232,7 +248,7 @@ export class SessionManager {
       if (event.action === 'thinking') {
         this.applyState(agent, 'thinking', STATIONS.whiteboard, 'Thinking...');
       } else if (event.action === 'responding') {
-        this.applyState(agent, 'coding', desk, 'Writing code...');
+        this.applyState(agent, 'coding', desk, 'Responding...');
       } else if (event.action === 'waiting') {
         this.applyState(agent, 'waiting', STATIONS.coffee, 'Waiting...');
         agent.waitingForHuman = true;

@@ -2,7 +2,7 @@ import { Application, Container, Ticker } from 'pixi.js';
 import type { Agent } from '../types/agent.js';
 import { useOfficeStore } from '../state/useOfficeStore.js';
 import { useDayNightStore } from '../state/useDayNightStore.js';
-import { AgentSpriteManager } from './AgentSprite.js';
+import { AgentSpriteManager, worldTransform } from './AgentSprite.js';
 import { AmbientEffects } from './AmbientEffects.js';
 import type { DayNightCycle } from './DayNightCycle.js';
 import type { ScreensaverMode } from './ScreensaverMode.js';
@@ -87,6 +87,17 @@ export class AnimationController {
     this.ambientEffects?.update(deltaSeconds, agents);
     this.spriteManager.update(deltaSeconds, agents);
     this.updateAudioLoops(ticker.deltaMS, agents);
+
+    // Sync world container transform for BubbleOverlay coordinate mapping
+    const world = this.layer.parent;
+    if (world) {
+      worldTransform.scaleX = world.scale.x;
+      worldTransform.scaleY = world.scale.y;
+      worldTransform.pivotX = world.pivot.x;
+      worldTransform.pivotY = world.pivot.y;
+      worldTransform.posX = world.position.x;
+      worldTransform.posY = world.position.y;
+    }
     this.screensaverMode?.update(deltaSeconds);
   };
 

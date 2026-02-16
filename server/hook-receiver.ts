@@ -25,12 +25,16 @@ export function createHookRouter(sessionManager: SessionManager, wsServer: WSSer
         body.transcript_path = basename(body.transcript_path);
       }
 
+      const hasSession = sessionManager.hasSession(sessionId);
       // eslint-disable-next-line no-console
-      console.log(`[hooks] ${hookEventName} for session ${sessionId.slice(0, 12)}`);
+      console.log(`[hooks] ${hookEventName} for session ${sessionId.slice(0, 12)}… (known=${hasSession})`);
 
       const event = sessionManager.handleHookEvent(hookEventName, body);
       if (event) {
         wsServer.broadcast(event);
+        wsServer.broadcastSnapshot();
+      } else if (hasSession) {
+        // Hook was handled but didn't produce a broadcast event — still snapshot
         wsServer.broadcastSnapshot();
       }
 
