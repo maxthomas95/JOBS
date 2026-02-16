@@ -60,7 +60,10 @@ function targetFor(agent: Agent, state: AgentState, _tool?: string): Point {
     return tileToWorld(STATIONS.whiteboard);
   }
   if (state === 'reading') {
-    return tileToWorld(STATIONS.whiteboard);
+    if (agent.deskIndex !== null) {
+      return tileToWorld(STATIONS.desks[agent.deskIndex]);
+    }
+    return tileToWorld(STATIONS.library);
   }
   if (state === 'terminal') {
     return tileToWorld(STATIONS.terminal);
@@ -149,7 +152,10 @@ export const useOfficeStore = create<OfficeState>()(
       const map = new Map<string, Agent>();
       const nextHistory = new Map(state.agentHistory);
       for (const agent of agents) {
-        map.set(agent.id, agent);
+        // Recalculate targetPosition using client-side STATIONS
+        // (server stations may differ from the active map renderer)
+        const recalcTarget = targetFor(agent, agent.state);
+        map.set(agent.id, { ...agent, targetPosition: recalcTarget });
         const prev = prevAgents.get(agent.id);
         // Record state change in history when snapshot introduces a new state
         if (prev && agent.state !== prev.state) {
@@ -181,7 +187,9 @@ export const useOfficeStore = create<OfficeState>()(
           characterIndex: event.characterIndex ?? Math.floor(Math.random() * 8),
           state: 'entering',
           position: tileToWorld(STATIONS.door),
-          targetPosition: tileToWorld(STATIONS.whiteboard),
+          targetPosition: event.deskIndex != null
+            ? tileToWorld(STATIONS.desks[event.deskIndex])
+            : tileToWorld(STATIONS.door),
           deskIndex: event.deskIndex ?? null,
           lastEventAt: event.timestamp,
           stateChangedAt: event.timestamp,

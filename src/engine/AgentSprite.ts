@@ -332,7 +332,7 @@ export class AgentSpriteManager {
         // Path to child's desk
         if (newChild.deskIndex !== null) {
           const deskTile = STATIONS.desks[newChild.deskIndex];
-          const deskWorld = tileToWorld({ x: deskTile.x, y: deskTile.y + 1 });
+          const deskWorld = tileToWorld(deskTile);
           const path = findPath({ x: sprite.x, y: sprite.y }, deskWorld);
           visual.waypoints = path.length > 0 ? path : [deskWorld];
         } else {
@@ -350,7 +350,7 @@ export class AgentSpriteManager {
           visual.delegationTimer = 0; // reset for handoff phase
           if (child.deskIndex !== null) {
             const deskTile = STATIONS.desks[child.deskIndex];
-            const deskWorld = tileToWorld({ x: deskTile.x, y: deskTile.y + 1 });
+            const deskWorld = tileToWorld(deskTile);
             const path = findPath({ x: sprite.x, y: sprite.y }, deskWorld);
             visual.waypoints = path.length > 0 ? path : [deskWorld];
           } else {
@@ -430,7 +430,7 @@ export class AgentSpriteManager {
   private generateReturnPath(agent: Agent, visual: AgentVisual, sprite: AnimatedGIF): void {
     if (agent.deskIndex !== null) {
       const deskTile = STATIONS.desks[agent.deskIndex];
-      const deskWorld = tileToWorld({ x: deskTile.x, y: deskTile.y + 1 });
+      const deskWorld = tileToWorld(deskTile);
       const path = findPath({ x: sprite.x, y: sprite.y }, deskWorld);
       visual.waypoints = path.length > 0 ? path : [deskWorld];
     } else {
@@ -609,9 +609,7 @@ export class AgentSpriteManager {
     if (visual.patrolIndex < visual.patrolChildDesks.length) {
       const targetDeskIdx = visual.patrolChildDesks[visual.patrolIndex];
       const deskTile = STATIONS.desks[targetDeskIdx];
-      // Stand one tile below the desk (desks are non-walkable)
-      const standTile = { x: deskTile.x, y: deskTile.y + 1 };
-      const targetWorld = tileToWorld(standTile);
+      const targetWorld = tileToWorld(deskTile);
 
       if (visual.patrolWaypoints.length === 0) {
         const path = findPath({ x: sprite.x, y: sprite.y }, targetWorld);
