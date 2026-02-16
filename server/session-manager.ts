@@ -79,7 +79,7 @@ interface PendingSpawn {
 
 export class SessionManager {
   private readonly agents = new Map<string, ServerAgent>();
-  private readonly deskAssignments: Array<string | null> = new Array<string | null>(10).fill(null);
+  private readonly deskAssignments: Array<string | null>;
   private nextCharacterIndex = 0;
   private nextNameIndex = 0;
   private readonly assignedNames = new Set<string>();
@@ -93,6 +93,7 @@ export class SessionManager {
   private onSnapshotNeeded: (() => void) | null = null;
 
   constructor(staleIdleMs = Number(process.env.STALE_IDLE_MS ?? 60000), staleEvictMs = Number(process.env.STALE_EVICT_MS ?? 180000)) {
+    this.deskAssignments = new Array<string | null>(Math.max(1, STATIONS.desks.length)).fill(null);
     this.staleIdleMs = staleIdleMs;
     this.staleEvictMs = staleEvictMs;
     this.waitingEvictMs = Number(process.env.WAITING_EVICT_MS ?? 60000);
@@ -323,20 +324,34 @@ export class SessionManager {
   }
 
   private reserveDesk(sessionId: string, parentDeskIndex: number | null): number | null {
-    // If this is a sub-agent, prefer a desk adjacent to the parent
-    if (parentDeskIndex !== null) {
-      // Try adjacent desks in priority order:
-      // ±1 = same row neighbor, ±5 = same column (row above/below)
-      const offsets = [1, -1, 5, -5, 2, -2, 6, -6, 4, -4];
-      for (const offset of offsets) {
-        const candidate = parentDeskIndex + offset;
-        if (candidate >= 0 && candidate < this.deskAssignments.length && this.deskAssignments[candidate] === null) {
-          this.deskAssignments[candidate] = sessionId;
-          return candidate;
+    // If this is a sub-agent, prefer the nearest available desk to the parent.
+    if (
+      parentDeskIndex !== null &&
+      parentDeskIndex >= 0 &&
+      parentDeskIndex < STATIONS.desks.length
+    ) {
+      const parentDesk = STATIONS.desks[parentDeskIndex];
+      let bestIndex: number | null = null;
+      let bestDistance = Number.POSITIVE_INFINITY;
+
+      for (let i = 0; i < this.deskAssignments.length; i += 1) {
+        if (this.deskAssignments[i] !== null) continue;
+        const candidateDesk = STATIONS.desks[i];
+        if (!candidateDesk) continue;
+        const distance = Math.abs(candidateDesk.x - parentDesk.x) + Math.abs(candidateDesk.y - parentDesk.y);
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          bestIndex = i;
         }
       }
+
+      if (bestIndex !== null) {
+        this.deskAssignments[bestIndex] = sessionId;
+        return bestIndex;
+      }
     }
-    // Fallback: first available desk (FIFO)
+
+    // Fallback: first available desk.
     for (let i = 0; i < this.deskAssignments.length; i += 1) {
       if (this.deskAssignments[i] === null) {
         this.deskAssignments[i] = sessionId;

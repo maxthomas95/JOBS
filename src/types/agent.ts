@@ -55,22 +55,18 @@ export const STATIONS: {
   coffee: Point;
   desks: Point[];
 } = {
-  door: { x: 17, y: 13 },
-  whiteboard: { x: 6, y: 2 },
-  terminal: { x: 1, y: 12 },
-  library: { x: 16, y: 2 },
-  coffee: { x: 9, y: 12 },
+  door: { x: 18, y: 13 },
+  whiteboard: { x: 9, y: 2 },
+  terminal: { x: 13, y: 12 },
+  library: { x: 2, y: 3 },
+  coffee: { x: 16, y: 12 },
   desks: [
-    { x: 3, y: 4 },
-    { x: 6, y: 4 },
-    { x: 9, y: 4 },
-    { x: 12, y: 4 },
-    { x: 15, y: 4 },
-    { x: 3, y: 8 },
-    { x: 6, y: 8 },
-    { x: 9, y: 8 },
-    { x: 12, y: 8 },
-    { x: 15, y: 8 },
+    { x: 4, y: 6 },
+    { x: 8, y: 6 },
+    { x: 12, y: 6 },
+    { x: 4, y: 9 },
+    { x: 8, y: 9 },
+    { x: 12, y: 9 },
   ],
 };
 
