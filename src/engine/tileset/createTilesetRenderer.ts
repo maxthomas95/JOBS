@@ -1,4 +1,3 @@
-import { Assets } from 'pixi.js';
 import type { TilesetRenderer } from './TilesetRenderer.js';
 import { ImageTilesetRenderer } from './ImageTilesetRenderer.js';
 import { ProceduralTilesetRenderer } from './ProceduralTilesetRenderer.js';

@@ -9,6 +9,8 @@ export type AgentState =
   | 'delegating'
   | 'error'
   | 'waiting'
+  | 'needsApproval'
+  | 'compacting'
   | 'idle'
   | 'leaving';
 

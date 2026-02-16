@@ -22,7 +22,7 @@ export interface SessionEvent extends BaseEvent {
 
 export interface ActivityEvent extends BaseEvent {
   type: 'activity';
-  action: 'thinking' | 'responding' | 'waiting' | 'user_prompt';
+  action: 'thinking' | 'responding' | 'waiting' | 'user_prompt' | 'needsApproval' | 'compacting';
   tokens?: number;
 }
 
@@ -56,8 +56,15 @@ export type PixelEvent =
   | ErrorEvent
   | SummaryEvent;
 
+export interface StatsSummary {
+  sessionsToday: number;
+  totalSessions: number;
+  totalHours: number;
+  topTools: Array<{ tool: string; count: number }>;
+}
+
 export type WSMessage =
-  | { type: 'snapshot'; agents: Agent[]; timestamp: number }
+  | { type: 'snapshot'; agents: Agent[]; timestamp: number; stats?: StatsSummary }
   | { type: 'event'; payload: PixelEvent }
   | { type: 'ping' }
   | { type: 'pong' };

@@ -1,6 +1,8 @@
 import type { Agent, AgentState } from '../src/types/agent.js';
 import type { PixelEvent } from '../src/types/events.js';
 import { STATIONS, tileToWorld } from '../src/types/agent.js';
+import { createActivityEvent, createSessionEvent } from './bridge/pixel-events.js';
+import type { StatsStore } from './stats-store.js';
 
 const AGENT_NAMES = [
   'Ada', 'Grace', 'Linus', 'Alan', 'Dijkstra',
@@ -42,6 +44,8 @@ interface ServerAgent extends Agent {
   lastEventType?: string;
   /** Timestamp when the agent entered waitingForHuman — used for dedicated eviction */
   waitingSince?: number;
+  /** Whether this agent's waiting state was set deterministically via hooks (skip heuristic detector) */
+  hookActive?: boolean;
 }
 
 type ToolClassification = 'terminal' | 'searching' | 'reading' | 'coding' | 'delegating' | 'thinking';
@@ -84,6 +88,7 @@ export class SessionManager {
   private nextNameIndex = 0;
   private readonly assignedNames = new Set<string>();
   private readonly pendingSpawns: PendingSpawn[] = [];
+  private readonly hookPendingChildren = new Map<string, { parentId: string; agentType: string }>();
   private readonly spawnWindowMs = 10000;
   private readonly staleIdleMs: number;
   private readonly staleEvictMs: number;
@@ -91,6 +96,7 @@ export class SessionManager {
   private readonly waitingThresholdMs = 8000;
   private readonly waitingEvictMs: number;
   private onSnapshotNeeded: (() => void) | null = null;
+  private statsStore: StatsStore | null = null;
 
   constructor(staleIdleMs = Number(process.env.STALE_IDLE_MS ?? 60000), staleEvictMs = Number(process.env.STALE_EVICT_MS ?? 180000)) {
     this.deskAssignments = new Array<string | null>(Math.max(1, STATIONS.desks.length)).fill(null);
@@ -105,6 +111,10 @@ export class SessionManager {
     this.onSnapshotNeeded = cb;
   }
 
+  setStatsStore(store: StatsStore): void {
+    this.statsStore = store;
+  }
+
   registerSession(sessionId: string, filePath: string): ServerAgent {
     const existing = this.agents.get(sessionId);
     if (existing) {
@@ -116,8 +126,18 @@ export class SessionManager {
     const door = tileToWorld(STATIONS.door);
     const name = this.assignName();
 
-    // Check for pending parent spawn
-    const pendingSpawn = this.matchPendingSpawn();
+    // Check for deterministic hook-based parent linking first
+    const fileBasename = filePath.replace(/\\/g, '/').split('/').pop()?.replace(/\.jsonl$/, '') ?? '';
+    const hookChild = this.hookPendingChildren.get(fileBasename) ?? this.hookPendingChildren.get(sessionId);
+    if (hookChild) {
+      this.hookPendingChildren.delete(fileBasename);
+      this.hookPendingChildren.delete(sessionId);
+    }
+
+    // Fall back to time-window heuristic if no hook-based link
+    const pendingSpawn = hookChild
+      ? { parentId: hookChild.parentId, timestamp: Date.now(), childName: hookChild.agentType }
+      : this.matchPendingSpawn();
 
     // Reserve desk — prefer adjacent to parent if this is a sub-agent
     const parentAgent = pendingSpawn?.parentId ? this.agents.get(pendingSpawn.parentId) : null;
@@ -155,6 +175,7 @@ export class SessionManager {
 
     this.nextCharacterIndex += 1;
     this.agents.set(sessionId, agent);
+    this.statsStore?.recordSessionStart(sessionId, name, agent.project);
     return agent;
   }
 
@@ -173,6 +194,7 @@ export class SessionManager {
     if (agent.waitingForHuman) {
       agent.waitingForHuman = false;
       agent.waitingSince = undefined;
+      agent.hookActive = false;
     }
     const desk = agent.deskIndex === null ? STATIONS.whiteboard : STATIONS.desks[agent.deskIndex];
 
@@ -192,6 +214,7 @@ export class SessionManager {
           this.onSnapshotNeeded();
         }
       } else if (event.action === 'ended') {
+        this.statsStore?.recordSessionEnd(sessionId, {});
         this.applyState(agent, 'leaving', STATIONS.door, null);
         this.releaseDesk(sessionId);
         setTimeout(() => {
@@ -228,6 +251,7 @@ export class SessionManager {
     }
 
     if (event.type === 'tool' && event.status === 'started') {
+      this.statsStore?.recordToolUse(event.tool);
       const context = event.context ?? null;
       const mode = classifyTool(event.tool);
       // Record potential child spawn with the agent name from context
@@ -262,6 +286,97 @@ export class SessionManager {
       agent.lastEventType = 'summary';
       this.applyState(agent, 'cooling', STATIONS.coffee, 'Taking a break');
     }
+  }
+
+  handleHookEvent(hookEventName: string, payload: Record<string, unknown>): PixelEvent | null {
+    const sessionId = payload.session_id as string;
+
+    if (hookEventName === 'Stop') {
+      const agent = this.agents.get(sessionId);
+      if (agent) {
+        agent.waitingForHuman = true;
+        agent.waitingSince = Date.now();
+        agent.hookActive = true;
+        this.applyState(agent, 'waiting', STATIONS.coffee, 'Waiting...');
+        return createActivityEvent(sessionId, sessionId, Date.now(), 'waiting');
+      }
+      return null;
+    }
+
+    if (hookEventName === 'SubagentStart') {
+      const agentId = payload.agent_id as string | undefined;
+      const agentType = (payload.agent_type as string) ?? 'subagent';
+      if (agentId) {
+        this.hookPendingChildren.set(agentId, { parentId: sessionId, agentType });
+      }
+      return null;
+    }
+
+    if (hookEventName === 'SubagentStop') {
+      const agentId = payload.agent_id as string | undefined;
+      if (agentId && this.agents.has(agentId)) {
+        const event = createSessionEvent(agentId, 'ended', { agentId, project: this.agents.get(agentId)?.project ?? undefined });
+        this.handleEvent(event);
+        return event;
+      }
+      return null;
+    }
+
+    if (hookEventName === 'Notification') {
+      const toolName = payload.tool_name as string | undefined;
+      if (toolName === 'permission_prompt') {
+        const agent = this.agents.get(sessionId);
+        if (agent) {
+          agent.hookActive = true;
+          this.applyState(agent, 'needsApproval' as AgentState, STATIONS.coffee, 'Needs approval');
+          return createActivityEvent(sessionId, sessionId, Date.now(), 'needsApproval' as 'waiting');
+        }
+      }
+      return null;
+    }
+
+    if (hookEventName === 'PreCompact') {
+      const agent = this.agents.get(sessionId);
+      if (agent) {
+        this.applyState(agent, 'compacting' as AgentState, STATIONS.library, 'Compacting memory...');
+        return createActivityEvent(sessionId, sessionId, Date.now(), 'compacting' as 'waiting');
+      }
+      return null;
+    }
+
+    if (hookEventName === 'SessionStart') {
+      const event = createSessionEvent(sessionId, 'started', {
+        agentId: sessionId,
+        project: payload.project as string | undefined,
+        source: 'hook',
+      });
+      this.handleEvent(event);
+      return event;
+    }
+
+    if (hookEventName === 'SessionEnd') {
+      const event = createSessionEvent(sessionId, 'ended', {
+        agentId: sessionId,
+        project: this.agents.get(sessionId)?.project ?? undefined,
+      });
+      this.handleEvent(event);
+      return event;
+    }
+
+    if (hookEventName === 'TeammateIdle' || hookEventName === 'TaskCompleted') {
+      // Update supervisor's activityText with team status
+      const agent = this.agents.get(sessionId);
+      if (agent) {
+        const text = hookEventName === 'TeammateIdle'
+          ? `Teammate idle: ${(payload.teammate_name as string) ?? 'agent'}`
+          : `Task completed: ${(payload.task_name as string) ?? 'task'}`;
+        agent.activityText = text;
+        agent.lastEventAt = Date.now();
+      }
+      return null;
+    }
+
+    return null;
   }
 
   hasSession(sessionId: string): boolean {
@@ -433,6 +548,11 @@ export class SessionManager {
         }
 
         const elapsed = now - agent.lastEventAt;
+
+        // Skip heuristic detection if hooks are managing this agent's waiting state
+        if (agent.hookActive) {
+          continue;
+        }
 
         // When the last event was a text response and silence has lasted 8+ seconds,
         // the turn is over — Claude wrote its final text and is waiting for human input.

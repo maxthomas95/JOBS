@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { Application, Container, Color } from 'pixi.js';
 import { AnimationController } from './AnimationController.js';
 import { DayNightCycle } from './DayNightCycle.js';
+import { ScreensaverMode } from './ScreensaverMode.js';
 import { BubbleOverlay } from '../ui/BubbleOverlay.js';
 import { TiledMapRenderer } from './tileset/TiledMapRenderer.js';
 import type { TiledMap } from './tileset/TiledMapRenderer.js';
@@ -61,6 +62,7 @@ export function PixelOffice() {
     const dayNight = new DayNightCycle();
 
     let controller: AnimationController | null = null;
+    let screensaver: ScreensaverMode | null = null;
     let tiledRenderer: TiledMapRenderer | null = null;
     let fallbackRenderer: TilesetRenderer | null = null;
     let destroyed = false;
@@ -146,7 +148,8 @@ export function PixelOffice() {
       hostRef.current?.appendChild(app.canvas);
       canvasRef.current = app.canvas;
 
-      controller = new AnimationController(app, agentsLayer, ambientLayer, dayNight);
+      screensaver = new ScreensaverMode(app, world);
+      controller = new AnimationController(app, agentsLayer, ambientLayer, dayNight, screensaver);
       await controller.init();
     })();
 
@@ -154,6 +157,7 @@ export function PixelOffice() {
       destroyed = true;
       unsubTheme();
       controller?.destroy();
+      screensaver?.destroy();
       tiledRenderer?.destroy();
       fallbackRenderer?.destroy();
       dayNight.destroy();

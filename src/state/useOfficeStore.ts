@@ -71,8 +71,11 @@ function targetFor(agent: Agent, state: AgentState, _tool?: string): Point {
   if (state === 'searching') {
     return tileToWorld(STATIONS.library);
   }
-  if (state === 'cooling' || state === 'waiting') {
+  if (state === 'cooling' || state === 'waiting' || state === 'needsApproval') {
     return tileToWorld(STATIONS.coffee);
+  }
+  if (state === 'compacting') {
+    return tileToWorld(STATIONS.library);
   }
   if (state === 'leaving') {
     return tileToWorld(STATIONS.door);
@@ -256,6 +259,14 @@ export const useOfficeStore = create<OfficeState>()(
           patch.state = 'thinking';
           patch.targetPosition = tileToWorld(STATIONS.whiteboard);
           patch.activityText = 'Processing...';
+        } else if (event.action === 'needsApproval') {
+          patch.state = 'needsApproval';
+          patch.targetPosition = targetFor(existing, 'needsApproval');
+          patch.activityText = 'Needs approval';
+        } else if (event.action === 'compacting') {
+          patch.state = 'compacting';
+          patch.targetPosition = targetFor(existing, 'compacting');
+          patch.activityText = 'Compacting memory...';
         }
       } else if (event.type === 'tool' && event.status === 'started') {
         const toolState = classifyTool(event.tool);

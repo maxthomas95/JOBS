@@ -730,6 +730,28 @@ export class AgentSpriteManager {
       return;
     }
 
+    if (agent.state === 'needsApproval') {
+      sprite.stop();
+      // Pulsing orange tint
+      sprite.tint = Math.sin(visual.phase * 2) > 0 ? 0xff9800 : 0xffffff;
+      // Vertical bob
+      sprite.y += Math.sin(visual.phase * 1.5) * 0.5;
+      return;
+    }
+
+    if (agent.state === 'compacting') {
+      sprite.stop();
+      // Subtle purple tint blend
+      const t = (Math.sin(visual.phase * 1.2) + 1) / 2;
+      const r = Math.round(0xff - (0xff - 0xab) * t * 0.4);
+      const g = Math.round(0xff - (0xff - 0x47) * t * 0.4);
+      const b = Math.round(0xff - (0xff - 0xbc) * t * 0.4);
+      sprite.tint = (r << 16) | (g << 8) | b;
+      // Slow bob
+      sprite.y += Math.sin(visual.phase * 0.8) * 0.3;
+      return;
+    }
+
     // Default idle (delegating, waiting, etc.)
     sprite.stop();
   }

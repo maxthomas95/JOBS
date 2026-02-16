@@ -2,9 +2,11 @@ import type http from 'node:http';
 import WebSocket, { WebSocketServer } from 'ws';
 import type { PixelEvent, WSMessage } from '../src/types/events.js';
 import { SessionManager } from './session-manager.js';
+import type { StatsStore } from './stats-store.js';
 
 export class WSServer {
   private readonly wss: WebSocketServer;
+  private statsStore: StatsStore | null = null;
 
   constructor(server: http.Server, private readonly sessionManager: SessionManager, path = process.env.WS_PATH ?? '/ws') {
     this.wss = new WebSocketServer({ server, path });
@@ -33,11 +35,16 @@ export class WSServer {
     }, 30000).unref();
   }
 
+  setStatsStore(store: StatsStore): void {
+    this.statsStore = store;
+  }
+
   broadcastSnapshot(): void {
     const message: WSMessage = {
       type: 'snapshot',
       agents: this.sessionManager.getSnapshot(),
       timestamp: Date.now(),
+      stats: this.statsStore?.getSummary(),
     };
     const data = JSON.stringify(message);
     for (const client of this.wss.clients) {
@@ -62,6 +69,7 @@ export class WSServer {
       type: 'snapshot',
       agents: this.sessionManager.getSnapshot(),
       timestamp: Date.now(),
+      stats: this.statsStore?.getSummary(),
     };
     ws.send(JSON.stringify(message));
   }

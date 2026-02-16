@@ -11,6 +11,8 @@ const STATE_COLORS: Record<string, string> = {
   reading: '#42a5f5',
   error: '#ff4444',
   waiting: '#ffeb3b',
+  needsApproval: '#ff9800',
+  compacting: '#ab47bc',
   cooling: '#90a4ae',
   delegating: '#ce93d8',
 };

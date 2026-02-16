@@ -3,6 +3,7 @@ import type { WSMessage } from '../types/events.js';
 import { useOfficeStore } from '../state/useOfficeStore.js';
 import { useEventStore } from '../state/useEventStore.js';
 import { useConnectionStore } from '../state/useConnectionStore.js';
+import { useStatsStore } from '../state/useStatsStore.js';
 
 export function useWebSocket(url: string): void {
   useEffect(() => {
@@ -34,6 +35,9 @@ export function useWebSocket(url: string): void {
 
         if (message.type === 'snapshot') {
           useOfficeStore.getState().handleSnapshot(message.agents);
+          if (message.stats) {
+            useStatsStore.getState().updateStats(message.stats);
+          }
         } else if (message.type === 'event') {
           useOfficeStore.getState().handleEvent(message.payload);
           useEventStore.getState().addEvent(message.payload);

@@ -13,6 +13,8 @@ const STATE_LABELS: Record<AgentState, string> = {
   delegating: 'Delegating',
   error: 'Error',
   waiting: 'Waiting',
+  needsApproval: 'Needs Approval',
+  compacting: 'Compacting',
   idle: 'Idle',
   leaving: 'Leaving',
 };
@@ -28,6 +30,8 @@ const STATE_COLORS: Record<AgentState, string> = {
   delegating: '#ce93d8',
   error: '#ff4444',
   waiting: '#ffeb3b',
+  needsApproval: '#ff9800',
+  compacting: '#ab47bc',
   idle: '#666',
   leaving: '#999',
 };

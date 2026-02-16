@@ -36,6 +36,10 @@ export class MockEventGenerator {
       () => createToolEvent(this.sessionId, this.agentId, Date.now(), { tool: 'Task', status: 'completed' }),
       // Waiting for human input
       () => createActivityEvent(this.sessionId, this.agentId, Date.now(), 'waiting'),
+      // Needs approval (permission prompt)
+      () => createActivityEvent(this.sessionId, this.agentId, Date.now(), 'needsApproval'),
+      // Compacting memory
+      () => createActivityEvent(this.sessionId, this.agentId, Date.now(), 'compacting'),
       // User prompt resumes → thinking
       () => createActivityEvent(this.sessionId, this.agentId, Date.now(), 'user_prompt'),
       // Error scenario — tool error
@@ -126,10 +130,15 @@ export class SupervisorMockGenerator {
       () => createToolEvent(this.child2Id, this.child2Id, Date.now(), { tool: 'Bash', status: 'started', context: 'run tests' }),
       () => createToolEvent(this.child2Id, this.child2Id, Date.now(), { tool: 'Bash', status: 'completed' }),
 
-      // === Child 1 continues research ===
+      // === Child 1 needs approval (permission prompt) ===
+      () => createActivityEvent(this.child1Id, this.child1Id, Date.now(), 'needsApproval'),
+      // Approved → continues research
       () => createToolEvent(this.child1Id, this.child1Id, Date.now(), { tool: 'WebSearch', status: 'started', context: 'pixi.js patrol' }),
       () => createToolEvent(this.child1Id, this.child1Id, Date.now(), { tool: 'WebSearch', status: 'completed' }),
       () => createActivityEvent(this.child1Id, this.child1Id, Date.now(), 'responding'),
+
+      // === Parent compacts memory while waiting ===
+      () => createActivityEvent(this.parentId, this.parentId, Date.now(), 'compacting'),
 
       // === Child 2 continues building ===
       () => createToolEvent(this.child2Id, this.child2Id, Date.now(), { tool: 'Edit', status: 'started', context: 'HUD.tsx' }),

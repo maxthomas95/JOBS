@@ -19,20 +19,12 @@ const STATE_LABELS: Record<AgentState, string> = {
   delegating: 'Delegating',
   error: 'Error',
   waiting: 'Waiting',
+  needsApproval: 'Needs Approval',
+  compacting: 'Compacting',
   idle: 'Idle',
   leaving: 'Leaving',
 };
 
-const LEGEND_ITEMS: Array<{ state: AgentState; color: string }> = [
-  { state: 'coding', color: '#42a5f5' },
-  { state: 'thinking', color: '#7c4dff' },
-  { state: 'terminal', color: '#2ee65e' },
-  { state: 'searching', color: '#ffa726' },
-  { state: 'delegating', color: '#ce93d8' },
-  { state: 'waiting', color: '#ffeb3b' },
-  { state: 'error', color: '#ff4444' },
-  { state: 'cooling', color: '#90a4ae' },
-];
 
 function formatUptime(startMs: number, nowMs: number): string {
   const secs = Math.max(0, Math.floor((nowMs - startMs) / 1000));
@@ -154,11 +146,21 @@ export function HUD() {
   const recentEvents = events.slice(0, 5);
 
   const [now, setNow] = useState(Date.now());
-  const [showLegend, setShowLegend] = useState(false);
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set());
+  const [screensaverActive, setScreensaverActive] = useState(false);
   useEffect(() => {
     const id = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(id);
+  }, []);
+  useEffect(() => {
+    const onEnter = () => setScreensaverActive(true);
+    const onExit = () => setScreensaverActive(false);
+    window.addEventListener('screensaver-enter', onEnter);
+    window.addEventListener('screensaver-exit', onExit);
+    return () => {
+      window.removeEventListener('screensaver-enter', onEnter);
+      window.removeEventListener('screensaver-exit', onExit);
+    };
   }, []);
 
   const toggleProject = useCallback((project: string) => {
@@ -217,8 +219,12 @@ export function HUD() {
     );
   };
 
+  const screensaverStats = screensaverActive
+    ? `${count} ${count === 1 ? 'session' : 'sessions'} | ${formatUptime(0, now)} uptime`
+    : '';
+
   return (
-    <div className="hud-overlay">
+    <div className={`hud-overlay${screensaverActive ? ' screensaver-active' : ''}`}>
       <header className="hud-header">
         <h1>J.O.B.S. ONLINE</h1>
         <div className="hud-header-right">
@@ -261,6 +267,13 @@ export function HUD() {
           >
             {themeLabel}
           </button>
+          <button
+            className="daynight-toggle"
+            onClick={() => window.dispatchEvent(new CustomEvent('screensaver-toggle'))}
+            title="Toggle screensaver"
+          >
+            SCREEN
+          </button>
           <ConnectionStatus />
         </div>
       </header>
@@ -301,22 +314,9 @@ export function HUD() {
         </div>
       ) : null}
 
-      <div className="hud-legend-area">
-        <button className="legend-toggle" onClick={() => setShowLegend((v) => !v)}>
-          {showLegend ? 'HIDE LEGEND' : 'LEGEND'}
-        </button>
-
-        {showLegend ? (
-          <div className="color-legend">
-            {LEGEND_ITEMS.map((item) => (
-              <div key={item.state} className="legend-item">
-                <span className="legend-dot" style={{ background: item.color }} />
-                <span className="legend-label">{STATE_LABELS[item.state]}</span>
-              </div>
-            ))}
-          </div>
-        ) : null}
-      </div>
+      {screensaverActive ? (
+        <div className="screensaver-stats">{screensaverStats}</div>
+      ) : null}
     </div>
   );
 }

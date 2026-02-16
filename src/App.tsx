@@ -3,6 +3,7 @@ import { PixelOffice } from './engine/PixelOffice.js';
 import { useWebSocket } from './hooks/useWebSocket.js';
 import { HUD } from './ui/HUD.js';
 import { AgentDetailPanel } from './ui/AgentDetailPanel.js';
+import { StatsPanel } from './ui/StatsPanel.js';
 import { useThemeStore } from './state/useThemeStore.js';
 
 function getWsUrl(): string {
@@ -33,6 +34,7 @@ export default function App() {
       <PixelOffice />
       <HUD />
       <AgentDetailPanel />
+      <StatsPanel />
     </div>
   );
 }

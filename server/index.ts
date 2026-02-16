@@ -9,6 +9,8 @@ import { SessionManager } from './session-manager.js';
 import { WSServer } from './ws-server.js';
 import { MockEventGenerator, SupervisorMockGenerator } from './mock-events.js';
 import { createSessionEvent } from './bridge/pixel-events.js';
+import { createHookRouter } from './hook-receiver.js';
+import { StatsStore } from './stats-store.js';
 
 const app = express();
 const port = Number(process.env.PORT ?? 8780);
@@ -19,6 +21,7 @@ const claudeDir = rawClaudeDir.startsWith('~')
 const mockMode = process.env.MOCK_EVENTS ?? '';
 const useMock = mockMode === 'true' || mockMode === 'supervisor';
 
+app.use(express.json());
 app.use(express.static('dist'));
 
 app.get('/healthz', (_req, res) => {
@@ -31,6 +34,18 @@ const wsServer = new WSServer(server, sessionManager);
 
 // Wire up snapshot callback so waiting-for-human detector can broadcast changes
 sessionManager.setSnapshotCallback(() => wsServer.broadcastSnapshot());
+
+// Stats persistence
+const statsStore = new StatsStore();
+sessionManager.setStatsStore(statsStore);
+wsServer.setStatsStore(statsStore);
+
+app.get('/api/stats', (_req, res) => {
+  res.json(statsStore.getStats());
+});
+
+// Mount hook receiver for Claude Code hooks integration
+app.use(createHookRouter(sessionManager, wsServer));
 
 if (useMock) {
   const isSupervisorMode = mockMode === 'supervisor';
