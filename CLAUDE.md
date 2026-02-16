@@ -31,13 +31,15 @@ The system has two main parts connected by WebSocket:
 - `ui/` — React HUD overlay: header, agent roster sidebar, activity feed ticker, connection status, controls
 - `audio/` — Howler.js wrapper and sound registry
 
-**Data flow:** Claude Code writes JSONL → chokidar detects → parser extracts → adapter strips sensitive data → event factory normalizes → session manager tags with agentId → WebSocket broadcasts → Zustand store updates → animation controller maps state to behavior → PixiJS renders.
+**Data flow (two paths, merged in session-manager):**
+1. **JSONL watching (always-on, zero-config):** Claude Code writes JSONL → chokidar detects → parser extracts → adapter strips sensitive data → event factory normalizes → session manager tags with agentId → WebSocket broadcasts → Zustand store updates → animation controller maps state to behavior → PixiJS renders.
+2. **Claude Code hooks (opt-in, v2-M6):** Hook fires → async script POSTs to `/api/hooks` → session-manager merges with JSONL stream → same downstream path. Fills accuracy gaps: instant "waiting for human" (replaces 8s heuristic), deterministic parent-child linking (replaces 10s spawn window), new states like "needs approval" and "compacting."
 
 **Event-to-behavior mapping** drives the entire visualization: each bridge event type (session.started, tool.file_write, activity.thinking, etc.) maps to an agent state, office location, and animation. See VISION.md for the full mapping table.
 
 ## Project Status
 
-This is a greenfield project. VISION.md contains the complete architecture spec and milestone plan. No implementation code exists yet. The project is organized into 5 milestones (M1-M5) from proof-of-life through Docker deployment.
+Milestones v1 (M1-M5) and v2 (M1-M5) are complete. Currently in v2-M6 planning (Dashboard & Integrations). See VISION.md for the full roadmap.
 
 ## Key Design Decisions
 

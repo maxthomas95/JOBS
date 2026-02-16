@@ -64,22 +64,27 @@ Part of the Jarvis AI assistant ecosystem.
 │     │  - Discovers active sessions│                           │
 │     │  - Assigns agent IDs        │                           │
 │     │  - Tracks lifecycle         │                           │
-│     └────────────┬────────────────┘                           │
-│                  │                                            │
-│     ┌────────────┴────────────────┐                           │
-│     │     Bridge Core             │                           │
-│     │  (extracted from pixelhq)   │                           │
-│     │  - Watcher (chokidar)       │                           │
-│     │  - Parser (JSONL)           │                           │
-│     │  - Claude Adapter (privacy) │                           │
-│     │  - Event Factories          │                           │
-│     └────────────┬────────────────┘                           │
-│                  │                                            │
-└──────────────────┼────────────────────────────────────────────┘
-                   │ reads (chokidar file watch)
-                   │
-            ~/.claude/projects/**/*.jsonl
-            (mounted read-only into container)
+│     │  - Merges JSONL + hook data │                           │
+│     └───────┬─────────┬──────────┘                            │
+│             │         │                                       │
+│    ┌────────┴───┐  ┌──┴──────────────┐                        │
+│    │ Bridge Core│  │  Hook Receiver   │                        │
+│    │ (pixelhq)  │  │  POST /api/hooks │                        │
+│    │ - Watcher  │  │  (optional v2-M6)│                        │
+│    │ - Parser   │  │                  │                        │
+│    │ - Adapter  │  │  Accepts async   │                        │
+│    │ - Events   │  │  hook payloads   │                        │
+│    └────────┬───┘  └──┬──────────────┘                        │
+│             │         │                                       │
+└─────────────┼─────────┼──────────────────────────────────────┘
+              │         │
+   chokidar watch    HTTP POST from
+              │      hook scripts
+              │         │
+  ~/.claude/projects/   Claude Code hooks
+   **/*.jsonl           (async, non-blocking)
+  (always-on,          (opt-in enhanced mode,
+   zero-config)         fills accuracy gaps)
 ```
 
 ---
@@ -536,8 +541,36 @@ open http://your-proxmox-host:8780
 - **Deliverable:** Screenshot-worthy pixel art office (LimeZu for personal use)
 
 ### v2-M6: Dashboard & Integrations — "Beyond Claude Code"
-> Turn J.O.B.S. into a persistent operational dashboard.
+> Turn J.O.B.S. into a persistent operational dashboard. JSONL watching remains the zero-config foundation; hooks and webhooks layer on top for richer, lower-latency data when available.
 
+- [ ] **Claude Code hooks integration** — optional enhanced mode via Claude Code's hook system
+  - **Hybrid architecture:** JSONL file watching stays as the primary, zero-config path. Hooks are an additive layer that fills gaps JSONL physically cannot — no breaking changes, pure enhancement
+  - **Hook receiver endpoint** — `POST /api/hooks` on the existing Express server (port 8780)
+    - Accepts hook JSON payloads, routes through session-manager like JSONL events
+    - Server detects hook-active sessions (first hook event marks it) and uses hook data when available
+    - Falls back gracefully to JSONL-only behavior when hooks aren't configured
+  - **Ship a hook notify script** — `.claude/hooks/jobs-notify.sh` (or Node.js equivalent)
+    - Reads hook JSON from stdin, POSTs to JOBS server
+    - All hooks configured as `async: true` so they never slow down Claude's work
+    - Setup helper: `node server/setup-hooks.js` writes hooks config to `~/.claude/settings.json`
+  - **High-priority hooks** (solve real accuracy problems):
+    - `Stop` → **replaces the 8-second waiting heuristic** — fires the instant Claude finishes responding, so "waiting for human" state is deterministic instead of a guess
+    - `SubagentStart` / `SubagentStop` → **replaces the 10-second spawn window** — deterministic parent-child linking with `agent_id`, no timing-based matching
+  - **Medium-priority hooks** (new states impossible via JSONL):
+    - `Notification` (matcher: `permission_prompt`) → new **"Needs Approval"** agent state — agent could show a `"!"` bubble or walk to a new station. Currently invisible in JSONL
+    - `SessionStart` / `SessionEnd` → explicit lifecycle with `reason` field (cleaner than file creation/staleness detection)
+  - **Low-priority hooks** (nice-to-have enrichments):
+    - `PreToolUse` → slightly lower latency than JSONL (~0ms vs ~200ms file-system delay)
+    - `PreCompact` → new "Compacting memory..." visual state
+    - `TeammateIdle` / `TaskCompleted` → richer supervisor mode awareness
+  - **New agent states** enabled by hooks:
+    - `needsApproval` — permission prompt waiting for human (from `Notification` hook)
+    - `compacting` — context window being compressed (from `PreCompact` hook)
+  - **Why hybrid, not hooks-only:**
+    - Hooks require per-user setup (`~/.claude/settings.json`). JSONL watching works with zero config
+    - Hooks are a newer, evolving API — the event set has changed significantly in recent months. JSONL format is stable
+    - If a hook script fails/crashes, JSONL files still persist on disk as the safety net
+    - Not all environments support hooks (older Claude Code versions, restricted setups)
 - [ ] **Persistent stats dashboard**
   - Sessions today, total session hours, files touched, tools used breakdown
   - Per-agent history: past sessions, average duration, most-used tools
@@ -547,16 +580,18 @@ open http://your-proxmox-host:8780
   - Show ambient stats overlay (sessions today, uptime)
   - Perfect for office TV or Proxmox display
 - [ ] **Generic webhook adapter** — accept events from any source via HTTP POST
+  - Builds on the same `/api/hooks` endpoint used by Claude Code hooks
   - Standardized event schema, map to office behaviors
   - Could visualize CI/CD, deployments, monitoring alerts
 - [ ] **Multi-instance support** — watch multiple machines' Claude dirs
   - Aggregate sessions from multiple dev machines into one office
+  - Hooks-based sessions work out of the box (POST from any machine to the JOBS server)
 - [ ] **OpenAI Codex adapter** — visualize Codex CLI sessions alongside Claude Code
   - New watcher path for Codex session directory (format TBD — reverse-engineer local storage)
   - Codex parser + adapter mapping Codex events → PixelEvent (same states: thinking, writing, reading, terminal)
   - Sprite differentiation: visual indicator distinguishing Claude vs Codex agents (color tint, badge, or unique sprite)
   - Shared session manager — agent lifecycle is provider-agnostic, just needs a new event source
-- **Deliverable:** A living, always-on dashboard for your AI operations — provider-agnostic
+- **Deliverable:** A living, always-on dashboard for your AI operations — provider-agnostic, with optional enhanced accuracy via hooks
 
 ### v2-M7: Stabilization & Polish — "Make it bulletproof"
 > Freeze features. Hunt every bug, smooth every edge, answer every "wait, why does it do that?" before moving on.

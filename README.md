@@ -8,6 +8,10 @@ Part of the [Jarvis](https://github.com/maxthomas) AI assistant ecosystem.
 
 ## How It Works
 
+J.O.B.S. has two data paths — both work independently, and they're better together.
+
+### Standard Mode (zero config, works out of the box)
+
 ```
 Claude Code writes JSONL  →  chokidar detects  →  parser extracts
 →  adapter strips sensitive data  →  WebSocket broadcasts
@@ -16,7 +20,23 @@ Claude Code writes JSONL  →  chokidar detects  →  parser extracts
 
 The server watches `~/.claude/projects/**/*.jsonl` for Claude Code session files. Each JSONL line is parsed, stripped of sensitive content (code, file paths, bash commands), and broadcast as a normalized event to all connected browsers. The client maps events to agent states and office locations, driving sprite movement and animation.
 
-**Privacy first:** No code, file contents, or full paths ever leave the server. The adapter allowlists only safe metadata (basenames, tool names, patterns).
+### Enhanced Mode (opt-in, via Claude Code hooks)
+
+```
+Claude Code hook fires  →  async script POSTs to JOBS server
+→  session-manager merges with JSONL data  →  richer, faster updates
+```
+
+Claude Code's [hooks system](https://docs.anthropic.com/en/docs/claude-code/hooks) can send events directly to the JOBS server, filling gaps that JSONL file watching can't cover:
+
+- **Instant "waiting for human" detection** — the `Stop` hook fires the moment Claude finishes, replacing an 8-second silence heuristic
+- **Deterministic parent-child linking** — `SubagentStart`/`SubagentStop` hooks link teams immediately, replacing a 10-second timing window
+- **"Needs Approval" state** — `Notification` hooks surface permission prompts as a visible agent state (currently invisible via JSONL)
+- **Context compaction awareness** — `PreCompact` hook shows when an agent is compressing its memory
+
+All hooks run as `async: true` so they never slow down Claude's work. See [Enhanced Mode Setup](#enhanced-mode-setup) below.
+
+**Privacy first:** No code, file contents, or full paths ever leave the server. Both paths strip sensitive data — the JSONL adapter allowlists safe metadata, and the hook script forwards only event metadata.
 
 ## Quick Start
 
@@ -58,6 +78,40 @@ npm start
 | `PORT` | `8780` | Server port |
 | `CLAUDE_DIR` | `~/.claude` | Path to Claude Code data directory |
 | `MOCK_EVENTS` | `false` | Generate fake events for testing |
+
+## Enhanced Mode Setup
+
+Enhanced mode is optional. JOBS works fully without it — hooks just make it more accurate.
+
+**Automatic setup:**
+
+```bash
+node server/setup-hooks.js
+```
+
+This adds async hooks to your `~/.claude/settings.json` that POST event metadata to the JOBS server. No sensitive data is sent.
+
+**Manual setup:** Add to `~/.claude/settings.json`:
+
+```json
+{
+  "hooks": {
+    "Stop": [{ "matcher": "", "hooks": [{ "type": "command", "command": ".claude/hooks/jobs-notify.sh", "async": true }] }],
+    "SubagentStart": [{ "matcher": "", "hooks": [{ "type": "command", "command": ".claude/hooks/jobs-notify.sh", "async": true }] }],
+    "SubagentStop": [{ "matcher": "", "hooks": [{ "type": "command", "command": ".claude/hooks/jobs-notify.sh", "async": true }] }],
+    "Notification": [{ "matcher": "permission_prompt", "hooks": [{ "type": "command", "command": ".claude/hooks/jobs-notify.sh", "async": true }] }]
+  }
+}
+```
+
+**What improves with hooks enabled:**
+
+| Without Hooks | With Hooks |
+|---|---|
+| "Waiting for human" detected after ~8s silence | Instant detection via `Stop` event |
+| Parent-child linking uses 10s timing window | Deterministic via `SubagentStart` |
+| Permission prompts invisible | "Needs Approval" agent state |
+| Context compaction invisible | "Compacting..." agent state |
 
 ## Event-to-Behavior Mapping
 
