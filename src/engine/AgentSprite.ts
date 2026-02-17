@@ -59,6 +59,8 @@ interface AgentVisual {
   isPacingForTeam: boolean;
   paceTarget: Point | null;
   paceTimer: number;
+  /** Tiny pixel crown floating above supervisor's head */
+  crown: Graphics | null;
 }
 
 export class AgentSpriteManager {
@@ -104,6 +106,7 @@ export class AgentSpriteManager {
       patrolCurrentChildId: null,
       delegationState: 'none', delegationChildId: null, delegationTimer: 0,
       isPacingForTeam: false, paceTarget: null, paceTimer: 0,
+      crown: null,
     });
   }
 
@@ -112,6 +115,7 @@ export class AgentSpriteManager {
     if (!visual) {
       return;
     }
+    if (visual.crown) visual.crown.destroy();
     visual.shadow.destroy();
     visual.sprite.destroy();
     spritePositions.delete(id);
@@ -144,6 +148,7 @@ export class AgentSpriteManager {
           sprite.width = SPRITE_SIZE;
           sprite.height = SPRITE_SIZE;
         }
+        this.updateCrown(agent, visual, agents);
         spritePositions.set(id, { x: sprite.x, y: sprite.y });
         continue;
       }
@@ -170,6 +175,7 @@ export class AgentSpriteManager {
           sprite.width = SPRITE_SIZE;
           sprite.height = SPRITE_SIZE;
         }
+        this.updateCrown(agent, visual, agents);
         spritePositions.set(id, { x: sprite.x, y: sprite.y });
         continue;
       }
@@ -188,6 +194,7 @@ export class AgentSpriteManager {
           sprite.width = SPRITE_SIZE;
           sprite.height = SPRITE_SIZE;
         }
+        this.updateCrown(agent, visual, agents);
         spritePositions.set(id, { x: sprite.x, y: sprite.y });
         continue;
       }
@@ -268,6 +275,9 @@ export class AgentSpriteManager {
         sprite.width = SPRITE_SIZE;
         sprite.height = SPRITE_SIZE;
       }
+
+      // --- Crown for supervisor with active children ---
+      this.updateCrown(agent, visual, agents);
 
       // Export sprite position for HTML bubble overlay
       spritePositions.set(id, { x: sprite.x, y: sprite.y });
@@ -695,6 +705,51 @@ export class AgentSpriteManager {
     sprite.y += ny * speed * deltaSeconds;
     if (!sprite.playing) sprite.play();
     return false;
+  }
+
+  /**
+   * Draw a tiny pixel-art crown (~10x6px) centered at its own origin.
+   */
+  private drawCrown(): Graphics {
+    const g = new Graphics();
+    // Gold base band (10px wide, 2px tall)
+    g.rect(-5, 2, 10, 2).fill(0xffd54f);
+    // Three pointed peaks
+    g.rect(-5, 0, 2, 2).fill(0xffd54f); // left peak
+    g.rect(-1, 0, 2, 2).fill(0xffd54f); // center peak
+    g.rect(3, 0, 2, 2).fill(0xffd54f);  // right peak
+    g.rect(-5, -1, 2, 1).fill(0xffd54f); // left tip
+    g.rect(-1, -1, 2, 1).fill(0xffd54f); // center tip
+    g.rect(3, -1, 2, 1).fill(0xffd54f);  // right tip
+    // Tiny gem dots on the base
+    g.rect(-3, 2, 2, 2).fill(0xff4444); // red gem
+    g.rect(1, 2, 2, 2).fill(0x4488ff);  // blue gem
+    return g;
+  }
+
+  /**
+   * Show/hide/position the crown above the supervisor's head.
+   */
+  private updateCrown(agent: Agent, visual: AgentVisual, agents: Map<string, Agent>): void {
+    const hasActiveChildren = agent.childIds.some((cid) => agents.has(cid));
+    const sprite = visual.sprite;
+
+    if (hasActiveChildren) {
+      // Show crown
+      if (!visual.crown) {
+        visual.crown = this.drawCrown();
+        this.container.addChild(visual.crown);
+      }
+      // Position above head with gentle bob
+      visual.crown.x = sprite.x;
+      visual.crown.y = sprite.y - sprite.height * 0.75 - 8 + Math.sin(visual.phase * 2) * 1;
+    } else {
+      // Hide crown
+      if (visual.crown) {
+        visual.crown.destroy();
+        visual.crown = null;
+      }
+    }
   }
 
   private applyIdlePose(agent: Agent, visual: AgentVisual, deltaSeconds: number): void {
