@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { devtools, subscribeWithSelector } from 'zustand/middleware';
 import type { Agent, AgentState, Point } from '../types/agent.js';
 import { STATIONS, tileToWorld } from '../types/agent.js';
-import type { PixelEvent } from '../types/events.js';
+import type { MachineInfo, PixelEvent } from '../types/events.js';
 
 export interface StateEntry {
   state: AgentState;
@@ -11,6 +11,8 @@ export interface StateEntry {
 
 interface OfficeState {
   agents: Map<string, Agent>;
+  machines: Map<string, MachineInfo>;
+  groupMode: 'project' | 'machine';
   focusedAgentId: string | null;
   focusedAgentIds: Set<string>;
   selectedAgentId: string | null;
@@ -25,8 +27,9 @@ interface OfficeState {
   addAgent: (agent: Agent) => void;
   updateAgent: (id: string, patch: Partial<Agent>) => void;
   removeAgent: (id: string) => void;
-  handleSnapshot: (agents: Agent[]) => void;
+  handleSnapshot: (agents: Agent[], machines?: MachineInfo[]) => void;
   handleEvent: (event: PixelEvent) => void;
+  setGroupMode: (mode: 'project' | 'machine') => void;
   focusAgent: (id: string | null) => void;
   focusTeam: (supervisorId: string) => void;
   selectAgent: (id: string | null) => void;
@@ -98,6 +101,17 @@ function targetFor(agent: Agent, state: AgentState, _tool?: string): Point {
   return tileToWorld(STATIONS.whiteboard);
 }
 
+export function groupByMachine(agents: Agent[]): Map<string, Agent[]> {
+  const groups = new Map<string, Agent[]>();
+  for (const agent of agents) {
+    const key = agent.machineId || 'local';
+    const list = groups.get(key) ?? [];
+    list.push(agent);
+    groups.set(key, list);
+  }
+  return groups;
+}
+
 let focusTimer: ReturnType<typeof setTimeout> | null = null;
 let notificationPermissionRequested = false;
 
@@ -115,6 +129,8 @@ export const useOfficeStore = create<OfficeState>()(
   devtools(
     subscribeWithSelector((set, get) => ({
     agents: new Map<string, Agent>(),
+    machines: new Map<string, MachineInfo>(),
+    groupMode: 'project' as const,
     focusedAgentId: null,
     focusedAgentIds: new Set<string>(),
     selectedAgentId: null,
@@ -161,7 +177,7 @@ export const useOfficeStore = create<OfficeState>()(
       });
     },
 
-    handleSnapshot: (agents) => {
+    handleSnapshot: (agents, machines) => {
       const state = get();
       const prevAgents = state.agents;
       const map = new Map<string, Agent>();
@@ -187,7 +203,15 @@ export const useOfficeStore = create<OfficeState>()(
           }
         }
       }
-      set({ agents: map, agentHistory: nextHistory });
+      const patch: Partial<OfficeState> = { agents: map, agentHistory: nextHistory };
+      if (machines) {
+        const machineMap = new Map<string, MachineInfo>();
+        for (const m of machines) {
+          machineMap.set(m.id, m);
+        }
+        patch.machines = machineMap;
+      }
+      set(patch);
     },
 
     handleEvent: (event) => {
@@ -215,6 +239,12 @@ export const useOfficeStore = create<OfficeState>()(
           waitingForHuman: false,
           parentId,
           childIds: [],
+          provider: 'claude',
+          machineId: null,
+          machineName: null,
+          sourceType: null,
+          sourceName: null,
+          sourceUrl: null,
         };
         state.addAgent(newAgent);
         // Link child to parent's childIds
@@ -336,6 +366,10 @@ export const useOfficeStore = create<OfficeState>()(
       }
 
       state.updateAgent(existing.id, patch);
+    },
+
+    setGroupMode: (mode) => {
+      set({ groupMode: mode });
     },
 
     focusAgent: (id) => {

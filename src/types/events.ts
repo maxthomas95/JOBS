@@ -63,8 +63,15 @@ export interface StatsSummary {
   topTools: Array<{ tool: string; count: number }>;
 }
 
+export interface MachineInfo {
+  id: string;
+  name: string;
+  color: string;
+  activeCount: number;
+}
+
 export type WSMessage =
-  | { type: 'snapshot'; agents: Agent[]; timestamp: number; stats?: StatsSummary }
+  | { type: 'snapshot'; agents: Agent[]; timestamp: number; stats?: StatsSummary; machines?: MachineInfo[] }
   | { type: 'event'; payload: PixelEvent }
   | { type: 'ping' }
   | { type: 'pong' };

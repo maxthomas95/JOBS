@@ -5,6 +5,7 @@ import { useEventStore } from '../state/useEventStore.js';
 import { useAudioStore } from '../state/useAudioStore.js';
 import { useDayNightStore } from '../state/useDayNightStore.js';
 import { useThemeStore } from '../state/useThemeStore.js';
+import { groupByMachine } from '../state/useOfficeStore.js';
 import type { Agent, AgentState } from '../types/agent.js';
 import type { PixelEvent } from '../types/events.js';
 
@@ -68,6 +69,19 @@ function truncate(text: string, max: number): string {
   return text.length > max ? text.slice(0, max) + '...' : text;
 }
 
+function providerBadge(agent: Agent): React.ReactNode {
+  if (agent.provider === 'codex') {
+    return <span className="provider-badge codex">CODEX</span>;
+  }
+  if (agent.provider === 'webhook') {
+    if (agent.sourceType === 'ci') return <span className="provider-badge ci">CI</span>;
+    if (agent.sourceType === 'deploy') return <span className="provider-badge deploy">DEPLOY</span>;
+    if (agent.sourceType === 'monitoring') return <span className="provider-badge monitor">MONITOR</span>;
+    return <span className="provider-badge webhook">WEBHOOK</span>;
+  }
+  return null;
+}
+
 /** Check if agent is a supervisor with active children */
 function isSupervisor(agent: Agent, agentMap: Map<string, Agent>): boolean {
   return agent.childIds.filter((id) => agentMap.has(id)).length > 0;
@@ -125,6 +139,9 @@ function groupByProject(agents: Agent[], agentMap: Map<string, Agent>): Map<stri
 
 export function HUD() {
   const agents = useOfficeStore((state) => state.agents);
+  const machines = useOfficeStore((state) => state.machines);
+  const groupMode = useOfficeStore((state) => state.groupMode);
+  const setGroupMode = useOfficeStore((state) => state.setGroupMode);
   const focusAgent = useOfficeStore((state) => state.focusAgent);
   const focusTeam = useOfficeStore((state) => state.focusTeam);
   const selectAgent = useOfficeStore((state) => state.selectAgent);
@@ -144,8 +161,12 @@ export function HUD() {
   const cycleTheme = useThemeStore((state) => state.cycleTheme);
   const count = agents.size;
   const allAgents = Array.from(agents.values()).slice(0, 10);
-  const projectGroups = groupByProject(allAgents, agents);
-  const multipleProjects = projectGroups.size > 1;
+  const multiMachine = machines.size > 1;
+  const showMachineMode = multiMachine && groupMode === 'machine';
+  const projectGroups = showMachineMode ? null : groupByProject(allAgents, agents);
+  const machineGroups = showMachineMode ? groupByMachine(allAgents) : null;
+  const activeGroups = showMachineMode ? machineGroups! : projectGroups!;
+  const multipleGroups = activeGroups.size > 1;
   const recentEvents = events.slice(0, 5);
 
   const [now, setNow] = useState(Date.now());
@@ -200,12 +221,19 @@ export function HUD() {
           style={{ background: CHARACTER_COLORS[agent.characterIndex % 8] }}
         />
         <span className="agent-name">{agent.name || agent.id.slice(0, 8)}</span>
+        {providerBadge(agent)}
         {supervisor ? (
           <span className="supervisor-badge">LEAD</span>
         ) : null}
         {isChild ? (
           <span className="agent-parent-tag">{parentName}</span>
         ) : null}
+        {multiMachine && !showMachineMode && agent.machineId ? (() => {
+          const machine = machines.get(agent.machineId);
+          return machine ? (
+            <span className="machine-dot" style={{ background: machine.color }} title={machine.name} />
+          ) : null;
+        })() : null}
         <span className="agent-state">{STATE_LABELS[agent.state]}</span>
         {agent.activityText ? (
           <span className="agent-activity">{truncate(agent.activityText, 20)}</span>
@@ -280,23 +308,39 @@ export function HUD() {
 
       <div className="agent-count">Active sessions: {count}</div>
 
+      {multiMachine ? (
+        <div className="group-toggle">
+          <button className={groupMode === 'project' ? 'active' : ''} onClick={() => setGroupMode('project')}>Project</button>
+          <button className={groupMode === 'machine' ? 'active' : ''} onClick={() => setGroupMode('machine')}>Machine</button>
+        </div>
+      ) : null}
+
       {allAgents.length > 0 ? (
         <div className="agent-list">
-          {Array.from(projectGroups.entries()).map(([project, groupAgents]) => (
-            <div key={project} className="project-group">
-              {multipleProjects ? (
-                <div
-                  className="project-header"
-                  onClick={() => toggleProject(project)}
-                >
-                  <span className="project-toggle">{collapsedProjects.has(project) ? '+' : '-'}</span>
-                  <span className="project-name">{project}</span>
-                  <span className="project-count">{groupAgents.length}</span>
-                </div>
-              ) : null}
-              {!collapsedProjects.has(project) ? groupAgents.map(renderAgentRow) : null}
-            </div>
-          ))}
+          {Array.from(activeGroups.entries()).map(([groupKey, groupAgents]) => {
+            const machineInfo = showMachineMode ? machines.get(groupKey) : null;
+            const headerLabel = showMachineMode
+              ? (machineInfo?.name || (groupKey === 'local' ? 'Local' : groupKey))
+              : groupKey;
+            return (
+              <div key={groupKey} className="project-group">
+                {multipleGroups ? (
+                  <div
+                    className="project-header"
+                    onClick={() => toggleProject(groupKey)}
+                  >
+                    <span className="project-toggle">{collapsedProjects.has(groupKey) ? '+' : '-'}</span>
+                    {machineInfo ? (
+                      <span className="machine-dot" style={{ background: machineInfo.color }} />
+                    ) : null}
+                    <span className="project-name">{headerLabel}</span>
+                    <span className="project-count">{groupAgents.length}</span>
+                  </div>
+                ) : null}
+                {!collapsedProjects.has(groupKey) ? groupAgents.map(renderAgentRow) : null}
+              </div>
+            );
+          })}
         </div>
       ) : null}
 

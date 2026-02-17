@@ -1,8 +1,33 @@
+import { hostname } from 'node:os';
 import type { Agent, AgentState } from '../src/types/agent.js';
-import type { PixelEvent } from '../src/types/events.js';
+import type { MachineInfo, PixelEvent } from '../src/types/events.js';
 import { STATIONS, tileToWorld } from '../src/types/agent.js';
 import { createActivityEvent, createSessionEvent } from './bridge/pixel-events.js';
 import type { StatsStore } from './stats-store.js';
+
+const MACHINE_COLORS = ['#4fc3f7', '#81c784', '#ffb74d', '#e57373', '#ba68c8', '#4dd0e1', '#fff176', '#f06292'];
+
+function machineColor(machineId: string): string {
+  let hash = 0;
+  for (let i = 0; i < machineId.length; i++) hash = ((hash << 5) - hash + machineId.charCodeAt(i)) | 0;
+  return MACHINE_COLORS[Math.abs(hash) % MACHINE_COLORS.length];
+}
+
+/** Map webhook state strings to AgentState + station */
+type StationName = 'door' | 'whiteboard' | 'terminal' | 'library' | 'coffee' | 'desk';
+const WEBHOOK_STATE_MAP: Record<string, { state: AgentState; station: StationName }> = {
+  running: { state: 'coding', station: 'desk' },
+  testing: { state: 'terminal', station: 'terminal' },
+  building: { state: 'terminal', station: 'terminal' },
+  deploying: { state: 'delegating', station: 'desk' },
+  analyzing: { state: 'searching', station: 'library' },
+  waiting: { state: 'waiting', station: 'coffee' },
+  reviewing: { state: 'reading', station: 'desk' },
+  thinking: { state: 'thinking', station: 'whiteboard' },
+  error: { state: 'error', station: 'desk' },
+  success: { state: 'cooling', station: 'coffee' },
+  idle: { state: 'idle', station: 'desk' },
+};
 
 const AGENT_NAMES = [
   'Ada', 'Grace', 'Linus', 'Alan', 'Dijkstra',
@@ -97,12 +122,29 @@ export class SessionManager {
   private readonly waitingEvictMs: number;
   private onSnapshotNeeded: (() => void) | null = null;
   private statsStore: StatsStore | null = null;
+  private readonly machines = new Map<string, MachineInfo>();
+  private readonly localMachineId: string;
+  private readonly localMachineName: string;
 
-  constructor(staleIdleMs = Number(process.env.STALE_IDLE_MS ?? 60000), staleEvictMs = Number(process.env.STALE_EVICT_MS ?? 180000)) {
+  constructor(
+    staleIdleMs = Number(process.env.STALE_IDLE_MS ?? 60000),
+    staleEvictMs = Number(process.env.STALE_EVICT_MS ?? 180000),
+    localMachineId?: string,
+    localMachineName?: string,
+  ) {
     this.deskAssignments = new Array<string | null>(Math.max(1, STATIONS.desks.length)).fill(null);
     this.staleIdleMs = staleIdleMs;
     this.staleEvictMs = staleEvictMs;
     this.waitingEvictMs = Number(process.env.WAITING_EVICT_MS ?? 60000);
+    this.localMachineId = localMachineId ?? hostname();
+    this.localMachineName = localMachineName ?? this.localMachineId;
+    // Register local machine
+    this.machines.set(this.localMachineId, {
+      id: this.localMachineId,
+      name: this.localMachineName,
+      color: machineColor(this.localMachineId),
+      activeCount: 0,
+    });
     this.startGhostTimer();
     this.startWaitingDetector();
   }
@@ -161,8 +203,17 @@ export class SessionManager {
       waitingForHuman: false,
       parentId: pendingSpawn?.parentId ?? null,
       childIds: [],
+      provider: 'claude',
+      machineId: this.localMachineId,
+      machineName: this.localMachineName,
+      sourceType: null,
+      sourceName: null,
+      sourceUrl: null,
       filePath,
     };
+
+    // Update local machine active count
+    this.updateMachineCount(this.localMachineId, 1);
 
     // Link parent to child
     const parentId = pendingSpawn?.parentId ?? null;
@@ -305,7 +356,7 @@ export class SessionManager {
     }
   }
 
-  handleHookEvent(hookEventName: string, payload: Record<string, unknown>): PixelEvent | null {
+  handleHookEvent(hookEventName: string, payload: Record<string, unknown>, machineInfo?: { machineId?: string; machineName?: string }): PixelEvent | null {
     const sessionId = payload.session_id as string;
 
     if (hookEventName === 'Stop') {
@@ -371,6 +422,19 @@ export class SessionManager {
         source: 'hook',
       });
       this.handleEvent(event);
+      // Apply machine info from hook payload if present
+      if (machineInfo?.machineId) {
+        const agent = this.agents.get(sessionId);
+        if (agent) {
+          const mId = machineInfo.machineId;
+          this.ensureMachine(mId);
+          // Move count from local to new machine
+          this.updateMachineCount(agent.machineId ?? this.localMachineId, -1);
+          agent.machineId = mId;
+          agent.machineName = machineInfo.machineName ?? mId;
+          this.updateMachineCount(mId, 1);
+        }
+      }
       return event;
     }
 
@@ -405,8 +469,13 @@ export class SessionManager {
 
   removeSession(sessionId: string): void {
     const agent = this.agents.get(sessionId);
-    if (agent?.name) {
-      this.assignedNames.delete(agent.name);
+    if (agent) {
+      if (agent.name) {
+        this.assignedNames.delete(agent.name);
+      }
+      if (agent.machineId) {
+        this.updateMachineCount(agent.machineId, -1);
+      }
     }
     this.releaseDesk(sessionId);
     this.agents.delete(sessionId);
@@ -418,6 +487,152 @@ export class SessionManager {
       position: { ...agent.position },
       targetPosition: agent.targetPosition ? { ...agent.targetPosition } : null,
     }));
+  }
+
+  getMachines(): MachineInfo[] {
+    return Array.from(this.machines.values());
+  }
+
+  registerWebhookAgent(sourceId: string, opts: {
+    sourceName?: string;
+    sourceType?: string;
+    project?: string;
+    machine?: string;
+    state?: string;
+    activity?: string;
+    url?: string;
+  }): ServerAgent {
+    const agentId = `wh:${sourceId}`;
+    const existing = this.agents.get(agentId);
+    if (existing) {
+      existing.lastEventAt = Date.now();
+      return existing;
+    }
+
+    const door = tileToWorld(STATIONS.door);
+    const name = opts.sourceName ?? this.assignName();
+    const deskIndex = this.reserveDesk(agentId, null);
+    const target = deskIndex === null ? door : tileToWorld(STATIONS.desks[deskIndex]);
+
+    const mId = opts.machine ?? this.localMachineId;
+    this.ensureMachine(mId);
+
+    const provider = opts.sourceType === 'codex' ? 'codex' : 'webhook';
+
+    const agent: ServerAgent = {
+      id: agentId,
+      sessionId: agentId,
+      characterIndex: this.nextCharacterIndex % 8,
+      state: 'entering',
+      position: door,
+      targetPosition: target,
+      deskIndex,
+      lastEventAt: Date.now(),
+      stateChangedAt: Date.now(),
+      activityText: opts.activity ?? null,
+      name,
+      roleName: null,
+      project: opts.project ?? null,
+      waitingForHuman: false,
+      parentId: null,
+      childIds: [],
+      provider,
+      machineId: mId,
+      machineName: this.machines.get(mId)?.name ?? mId,
+      sourceType: opts.sourceType ?? null,
+      sourceName: opts.sourceName ?? null,
+      sourceUrl: opts.url ?? null,
+    };
+
+    this.nextCharacterIndex += 1;
+    this.agents.set(agentId, agent);
+    this.updateMachineCount(mId, 1);
+    this.statsStore?.recordSessionStart(agentId, name, agent.project);
+
+    // Apply initial state if provided
+    if (opts.state) {
+      this.applyWebhookState(agent, opts.state);
+    }
+
+    return agent;
+  }
+
+  updateWebhookAgent(agentId: string, state: string | null, activity: string | null, url: string | null): ServerAgent | null {
+    const agent = this.agents.get(agentId);
+    if (!agent) return null;
+
+    agent.lastEventAt = Date.now();
+    if (activity !== null) agent.activityText = activity;
+    if (url !== null) agent.sourceUrl = url;
+    if (state !== null) this.applyWebhookState(agent, state);
+
+    return agent;
+  }
+
+  removeWebhookAgent(agentId: string): boolean {
+    const agent = this.agents.get(agentId);
+    if (!agent) return false;
+
+    this.applyState(agent, 'leaving', STATIONS.door, null);
+    this.releaseDesk(agentId);
+    this.statsStore?.recordSessionEnd(agentId, {});
+
+    setTimeout(() => {
+      const a = this.agents.get(agentId);
+      if (a) {
+        if (a.name && !a.sourceName) {
+          // Only release pool name if it came from the pool (not from sourceName)
+          this.assignedNames.delete(a.name);
+        }
+        if (a.machineId) {
+          this.updateMachineCount(a.machineId, -1);
+        }
+        this.agents.delete(agentId);
+        if (this.onSnapshotNeeded) this.onSnapshotNeeded();
+      }
+    }, 2000);
+
+    return true;
+  }
+
+  touchWebhookAgent(agentId: string): boolean {
+    const agent = this.agents.get(agentId);
+    if (!agent) return false;
+    agent.lastEventAt = Date.now();
+    return true;
+  }
+
+  private applyWebhookState(agent: ServerAgent, webhookState: string): void {
+    const mapping = WEBHOOK_STATE_MAP[webhookState];
+    if (!mapping) return;
+
+    const desk = agent.deskIndex === null ? STATIONS.whiteboard : STATIONS.desks[agent.deskIndex];
+    const station = mapping.station === 'desk' ? desk : STATIONS[mapping.station as keyof typeof STATIONS] as { x: number; y: number };
+
+    if (mapping.state === 'error') {
+      // Don't change position on error — just set state
+      agent.state = 'error';
+      agent.stateChangedAt = Date.now();
+    } else {
+      this.applyState(agent, mapping.state, station, agent.activityText);
+    }
+  }
+
+  private ensureMachine(machineId: string): void {
+    if (!this.machines.has(machineId)) {
+      this.machines.set(machineId, {
+        id: machineId,
+        name: machineId,
+        color: machineColor(machineId),
+        activeCount: 0,
+      });
+    }
+  }
+
+  private updateMachineCount(machineId: string, delta: number): void {
+    this.ensureMachine(machineId);
+    const m = this.machines.get(machineId)!;
+    m.activeCount = Math.max(0, m.activeCount + delta);
   }
 
   private matchPendingSpawn(): PendingSpawn | null {

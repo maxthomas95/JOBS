@@ -918,6 +918,98 @@
   border-left: 2px solid #4fc3f7;
 }
 
+/* Provider badges */
+.provider-badge {
+  font-size: 0.45rem;
+  font-weight: 700;
+  padding: 0.03rem 0.2rem;
+  border-radius: 999px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.provider-badge.codex {
+  background: #10a37f;
+  color: #fff;
+}
+
+.provider-badge.ci {
+  background: rgba(66, 165, 245, 0.25);
+  border: 1px solid rgba(66, 165, 245, 0.5);
+  color: #42a5f5;
+}
+
+.provider-badge.deploy {
+  background: rgba(129, 199, 132, 0.25);
+  border: 1px solid rgba(129, 199, 132, 0.5);
+  color: #81c784;
+}
+
+.provider-badge.monitor {
+  background: rgba(255, 167, 38, 0.25);
+  border: 1px solid rgba(255, 167, 38, 0.5);
+  color: #ffa726;
+}
+
+.provider-badge.webhook {
+  background: rgba(206, 147, 216, 0.2);
+  border: 1px solid rgba(206, 147, 216, 0.4);
+  color: #ce93d8;
+}
+
+/* Machine dot indicator */
+.machine-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+/* Group mode toggle */
+.group-toggle {
+  align-self: flex-start;
+  margin-top: 0.35rem;
+  display: flex;
+  gap: 1px;
+  border-radius: 4px;
+  overflow: hidden;
+  pointer-events: auto;
+}
+
+.group-toggle button {
+  font-family: inherit;
+  font-size: 0.55rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.2rem 0.5rem;
+  border: 1px solid var(--panel-border, #4a5167);
+  background: var(--panel-bg, rgba(10, 12, 18, 0.75));
+  color: var(--text, #e8edf5);
+  opacity: 0.5;
+  cursor: pointer;
+}
+
+.group-toggle button:first-child {
+  border-radius: 4px 0 0 4px;
+}
+
+.group-toggle button:last-child {
+  border-radius: 0 4px 4px 0;
+}
+
+.group-toggle button.active {
+  opacity: 1;
+  background: rgba(79, 195, 247, 0.15);
+  border-color: #4fc3f7;
+}
+
+.group-toggle button:hover {
+  opacity: 0.8;
+}
+
 @media (max-width: 640px) {
   .pixel-office {
     padding: 0.75rem;

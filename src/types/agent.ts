@@ -44,6 +44,18 @@ export interface Agent {
   parentId: string | null;
   /** Session IDs of child agents spawned by this agent */
   childIds: string[];
+  /** Agent provider: 'claude' | 'codex' | 'webhook' */
+  provider: string;
+  /** Machine instance ID (null = local) */
+  machineId: string | null;
+  /** Machine display name */
+  machineName: string | null;
+  /** Webhook source type: 'ci', 'monitoring', 'deploy', 'codex' */
+  sourceType: string | null;
+  /** Webhook source display name: "GitHub Actions", "Codex CLI" */
+  sourceName: string | null;
+  /** External URL (e.g. link to CI run) */
+  sourceUrl: string | null;
 }
 
 export const TILE_SIZE = 16;

@@ -1,5 +1,7 @@
 import { createSessionEvent, createToolEvent, createActivityEvent, createSummaryEvent } from './bridge/pixel-events.js';
 import type { PixelEvent } from '../src/types/events.js';
+import type { SessionManager } from './session-manager.js';
+import type { WSServer } from './ws-server.js';
 
 export class MockEventGenerator {
   private interval: NodeJS.Timeout | null = null;
@@ -172,6 +174,232 @@ export class SupervisorMockGenerator {
       callback(steps[this.cursor]());
       this.cursor += 1;
     }, 2500);
+  }
+
+  stop(): void {
+    if (this.interval) {
+      clearInterval(this.interval);
+      this.interval = null;
+    }
+  }
+}
+
+/**
+ * Mock event generator for webhook scenarios (MOCK_EVENTS=webhook).
+ * Simulates a CI pipeline agent and a Codex agent alongside a normal Claude session.
+ */
+export class WebhookMockGenerator {
+  private interval: NodeJS.Timeout | null = null;
+  private cursor = 0;
+  private ciRegistered = false;
+  private codexRegistered = false;
+  private readonly claudeId = 'mock-claude-main';
+
+  start(sessionManager: SessionManager, wsServer: WSServer): void {
+    this.stop();
+
+    const ciStates = ['running', 'building', 'testing', 'success'];
+    const codexStates = ['thinking', 'running', 'reviewing', 'running'];
+    let ciStateIdx = 0;
+    let codexStateIdx = 0;
+
+    // Start the Claude session via normal event flow
+    const claudeStarted = createSessionEvent(this.claudeId, 'started', {
+      agentId: this.claudeId,
+      project: 'my-app',
+    });
+    sessionManager.handleEvent(claudeStarted);
+    wsServer.broadcast(claudeStarted);
+    wsServer.broadcastSnapshot();
+
+    this.interval = setInterval(() => {
+      this.cursor += 1;
+
+      // Step 2: Register CI pipeline webhook agent
+      if (this.cursor === 2 && !this.ciRegistered) {
+        this.ciRegistered = true;
+        sessionManager.registerWebhookAgent('gh-actions-42', {
+          sourceName: 'GitHub Actions',
+          sourceType: 'ci',
+          project: 'my-app',
+          state: 'running',
+          activity: 'CI Pipeline #42',
+          url: 'https://github.com/example/my-app/actions/runs/42',
+        });
+        wsServer.broadcastSnapshot();
+        return;
+      }
+
+      // Step 4: Register Codex webhook agent
+      if (this.cursor === 4 && !this.codexRegistered) {
+        this.codexRegistered = true;
+        sessionManager.registerWebhookAgent('codex-refactor', {
+          sourceName: 'Codex CLI',
+          sourceType: 'codex',
+          project: 'my-app',
+          state: 'thinking',
+          activity: 'Refactoring auth module',
+        });
+        wsServer.broadcastSnapshot();
+        return;
+      }
+
+      // Cycle Claude through work states
+      const claudeSteps: Array<() => PixelEvent> = [
+        () => createActivityEvent(this.claudeId, this.claudeId, Date.now(), 'thinking'),
+        () => createToolEvent(this.claudeId, this.claudeId, Date.now(), { tool: 'Read', status: 'started', context: 'auth.ts' }),
+        () => createToolEvent(this.claudeId, this.claudeId, Date.now(), { tool: 'Read', status: 'completed' }),
+        () => createActivityEvent(this.claudeId, this.claudeId, Date.now(), 'responding'),
+        () => createToolEvent(this.claudeId, this.claudeId, Date.now(), { tool: 'Edit', status: 'started', context: 'auth.ts' }),
+        () => createToolEvent(this.claudeId, this.claudeId, Date.now(), { tool: 'Edit', status: 'completed' }),
+        () => createToolEvent(this.claudeId, this.claudeId, Date.now(), { tool: 'Bash', status: 'started', context: 'npm test' }),
+        () => createToolEvent(this.claudeId, this.claudeId, Date.now(), { tool: 'Bash', status: 'completed' }),
+      ];
+      const claudeEvent = claudeSteps[(this.cursor - 5) % claudeSteps.length]();
+      sessionManager.handleEvent(claudeEvent);
+      wsServer.broadcast(claudeEvent);
+
+      // Cycle CI through states
+      if (this.ciRegistered && this.cursor % 3 === 0) {
+        const newState = ciStates[ciStateIdx % ciStates.length];
+        ciStateIdx += 1;
+        sessionManager.updateWebhookAgent('wh:gh-actions-42', newState, `Pipeline step: ${newState}`, null);
+        wsServer.broadcastSnapshot();
+      }
+
+      // Cycle Codex through states
+      if (this.codexRegistered && this.cursor % 4 === 0) {
+        const newState = codexStates[codexStateIdx % codexStates.length];
+        codexStateIdx += 1;
+        sessionManager.updateWebhookAgent('wh:codex-refactor', newState, `Codex: ${newState}`, null);
+        wsServer.broadcastSnapshot();
+      }
+
+      // Remove CI agent after it cycles through all states twice
+      if (this.ciRegistered && ciStateIdx >= ciStates.length * 2) {
+        sessionManager.removeWebhookAgent('wh:gh-actions-42');
+        wsServer.broadcastSnapshot();
+        this.ciRegistered = false;
+        ciStateIdx = 0;
+      }
+    }, 3000);
+  }
+
+  stop(): void {
+    if (this.interval) {
+      clearInterval(this.interval);
+      this.interval = null;
+    }
+  }
+}
+
+/**
+ * Mock event generator for multi-instance scenarios (MOCK_EVENTS=multi).
+ * Creates agents across 2 machines with mixed types (Claude, webhook, Codex).
+ */
+export class MultiInstanceMockGenerator {
+  private interval: NodeJS.Timeout | null = null;
+  private cursor = 0;
+  private readonly machine1Claude = 'mock-m1-claude';
+  private machine1CiRegistered = false;
+
+  start(sessionManager: SessionManager, wsServer: WSServer): void {
+    this.stop();
+
+    // Machine 1 is the local machine (already registered in SessionManager)
+    // Machine 2 is simulated as a remote machine
+
+    // Start Claude session on machine 1 (local)
+    const m1Started = createSessionEvent(this.machine1Claude, 'started', {
+      agentId: this.machine1Claude,
+      project: 'frontend',
+    });
+    sessionManager.handleEvent(m1Started);
+    wsServer.broadcast(m1Started);
+
+    // Register a Codex agent on machine 2
+    sessionManager.registerWebhookAgent('m2-codex-main', {
+      sourceName: 'Codex CLI',
+      sourceType: 'codex',
+      project: 'backend',
+      machine: 'dev-server-2',
+      state: 'running',
+      activity: 'Implementing API routes',
+    });
+
+    // Register a Claude-like agent on machine 2 (simulated remote)
+    sessionManager.registerWebhookAgent('m2-claude-remote', {
+      sourceName: 'Claude Code',
+      sourceType: 'ci',
+      project: 'backend',
+      machine: 'dev-server-2',
+      state: 'thinking',
+      activity: 'Designing schema',
+    });
+
+    wsServer.broadcastSnapshot();
+
+    const m1Steps: Array<() => PixelEvent> = [
+      () => createActivityEvent(this.machine1Claude, this.machine1Claude, Date.now(), 'thinking'),
+      () => createToolEvent(this.machine1Claude, this.machine1Claude, Date.now(), { tool: 'Read', status: 'started', context: 'App.tsx' }),
+      () => createToolEvent(this.machine1Claude, this.machine1Claude, Date.now(), { tool: 'Read', status: 'completed' }),
+      () => createActivityEvent(this.machine1Claude, this.machine1Claude, Date.now(), 'responding'),
+      () => createToolEvent(this.machine1Claude, this.machine1Claude, Date.now(), { tool: 'Write', status: 'started', context: 'Dashboard.tsx' }),
+      () => createToolEvent(this.machine1Claude, this.machine1Claude, Date.now(), { tool: 'Write', status: 'completed' }),
+      () => createToolEvent(this.machine1Claude, this.machine1Claude, Date.now(), { tool: 'Bash', status: 'started', context: 'npm run build' }),
+      () => createToolEvent(this.machine1Claude, this.machine1Claude, Date.now(), { tool: 'Bash', status: 'completed' }),
+    ];
+
+    const m2CodexStates = ['running', 'thinking', 'reviewing', 'testing', 'running'];
+    const m2ClaudeStates = ['thinking', 'running', 'building', 'reviewing'];
+    let m2CodexIdx = 0;
+    let m2ClaudeIdx = 0;
+
+    this.interval = setInterval(() => {
+      this.cursor += 1;
+
+      // Machine 1: Claude events
+      const m1Event = m1Steps[(this.cursor - 1) % m1Steps.length]();
+      sessionManager.handleEvent(m1Event);
+      wsServer.broadcast(m1Event);
+
+      // Machine 1: Deploy pipeline (appears at step 5)
+      if (this.cursor === 5 && !this.machine1CiRegistered) {
+        this.machine1CiRegistered = true;
+        sessionManager.registerWebhookAgent('m1-deploy-prod', {
+          sourceName: 'Deploy',
+          sourceType: 'deploy',
+          project: 'frontend',
+          state: 'deploying',
+          activity: 'Deploying to production',
+          url: 'https://deploy.example.com/runs/99',
+        });
+        wsServer.broadcastSnapshot();
+      }
+
+      // Machine 2: Codex state cycling
+      if (this.cursor % 3 === 0) {
+        const state = m2CodexStates[m2CodexIdx % m2CodexStates.length];
+        m2CodexIdx += 1;
+        sessionManager.updateWebhookAgent('wh:m2-codex-main', state, `API routes: ${state}`, null);
+        wsServer.broadcastSnapshot();
+      }
+
+      // Machine 2: Remote Claude-like agent state cycling
+      if (this.cursor % 4 === 0) {
+        const state = m2ClaudeStates[m2ClaudeIdx % m2ClaudeStates.length];
+        m2ClaudeIdx += 1;
+        sessionManager.updateWebhookAgent('wh:m2-claude-remote', state, `Schema: ${state}`, null);
+        wsServer.broadcastSnapshot();
+      }
+
+      // Machine 1: Remove deploy agent after 8 cycles
+      if (this.machine1CiRegistered && this.cursor > 13) {
+        sessionManager.removeWebhookAgent('wh:m1-deploy-prod');
+        wsServer.broadcastSnapshot();
+        this.machine1CiRegistered = false;
+      }
+    }, 3000);
   }
 
   stop(): void {

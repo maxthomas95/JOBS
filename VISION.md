@@ -579,18 +579,24 @@ open http://your-proxmox-host:8780
   - Click FOLLOW on any agent in the roster to zoom in (1.8x) and track them
   - Smooth lerp camera with gentle drift, stays active until toggled off
   - Auto-unfollows when agent disconnects, smooth exit transition back to default view
-- [ ] **Generic webhook adapter** — accept events from any source via HTTP POST
-  - Builds on the same `/api/hooks` endpoint used by Claude Code hooks
-  - Standardized event schema, map to office behaviors
-  - Could visualize CI/CD, deployments, monitoring alerts
-- [ ] **Multi-instance support** — watch multiple machines' Claude dirs
-  - Aggregate sessions from multiple dev machines into one office
-  - Hooks-based sessions work out of the box (POST from any machine to the JOBS server)
-- [ ] **OpenAI Codex adapter** — visualize Codex CLI sessions alongside Claude Code
-  - New watcher path for Codex session directory (format TBD — reverse-engineer local storage)
-  - Codex parser + adapter mapping Codex events → PixelEvent (same states: thinking, writing, reading, terminal)
-  - Sprite differentiation: visual indicator distinguishing Claude vs Codex agents (color tint, badge, or unique sprite)
-  - Shared session manager — agent lifecycle is provider-agnostic, just needs a new event source
+- [x] **Generic webhook adapter** — accept events from any source via HTTP POST
+  - `POST /api/webhooks` endpoint with standardized WebhookPayload schema (source_id, event, state, activity, url)
+  - WebhookState→AgentState mapping (running, testing, building, deploying, analyzing, etc.)
+  - Webhook agents are full office citizens — desks, pathfinding, bubbles, `wh:` prefixed IDs
+  - Optional auth via `WEBHOOK_TOKEN` env var (Bearer header or body token field)
+  - Heartbeat events to keep long-running agents alive
+- [x] **Multi-instance support** — watch multiple machines' Claude dirs
+  - Machine registry with deterministic color assignment (hash-based from 8-color palette)
+  - `MACHINE_ID`/`MACHINE_NAME` env vars in hook notify scripts, extracted in hook-receiver
+  - HUD: machine grouping toggle (Project | Machine) when multiple machines present
+  - Machine headers with colored dots, per-agent machine indicators in project view
+  - Webhook agents can specify `machine` field for remote machine origin
+- [x] **OpenAI Codex adapter** — visualize Codex CLI sessions alongside Claude Code
+  - `server/hooks/codex-notify.js` — Codex `notify` hook script, reformats `agent-turn-complete` → webhook POST
+  - Turn-level granularity (not tool-level) — stable, zero-maintenance via Codex's notify hook
+  - `setup-hooks.js --codex` flag writes `notify` line to `~/.codex/config.toml`
+  - Provider badges in HUD: CODEX, CI, DEPLOY, MONITOR, WEBHOOK
+  - Agent detail panel: provider, machine, source URL display
 - **Deliverable:** A living, always-on dashboard for your AI operations — provider-agnostic, with optional enhanced accuracy via hooks
 
 ### v2-M7: Stabilization & Polish — "Make it bulletproof"

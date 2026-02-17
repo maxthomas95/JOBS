@@ -7,9 +7,10 @@ import { SessionWatcher } from './bridge/watcher.js';
 import { parseJsonlLine, transformToPixelEvents } from './bridge/parser.js';
 import { SessionManager } from './session-manager.js';
 import { WSServer } from './ws-server.js';
-import { MockEventGenerator, SupervisorMockGenerator } from './mock-events.js';
+import { MockEventGenerator, SupervisorMockGenerator, WebhookMockGenerator, MultiInstanceMockGenerator } from './mock-events.js';
 import { createSessionEvent } from './bridge/pixel-events.js';
 import { createHookRouter } from './hook-receiver.js';
+import { createWebhookRouter } from './webhook-receiver.js';
 import { StatsStore } from './stats-store.js';
 
 const app = express();
@@ -19,7 +20,9 @@ const claudeDir = rawClaudeDir.startsWith('~')
   ? join(homedir(), rawClaudeDir.slice(1))
   : rawClaudeDir;
 const mockMode = process.env.MOCK_EVENTS ?? '';
-const useMock = mockMode === 'true' || mockMode === 'supervisor';
+const useMock = ['true', 'supervisor', 'webhook', 'multi'].includes(mockMode);
+const machineId = process.env.MACHINE_ID || undefined;
+const machineName = process.env.MACHINE_NAME || undefined;
 
 app.use(express.json());
 app.use(express.static('dist'));
@@ -29,7 +32,7 @@ app.get('/healthz', (_req, res) => {
 });
 
 const server = http.createServer(app);
-const sessionManager = new SessionManager();
+const sessionManager = new SessionManager(undefined, undefined, machineId, machineName);
 const wsServer = new WSServer(server, sessionManager);
 
 // Wire up snapshot callback so waiting-for-human detector can broadcast changes
@@ -47,15 +50,26 @@ app.get('/api/stats', (_req, res) => {
 // Mount hook receiver for Claude Code hooks integration
 app.use(createHookRouter(sessionManager, wsServer));
 
+// Mount webhook receiver for external integrations (CI/CD, Codex, monitoring)
+app.use(createWebhookRouter(sessionManager, wsServer));
+
 if (useMock) {
-  const isSupervisorMode = mockMode === 'supervisor';
   // eslint-disable-next-line no-console
-  console.log(`[mock] using ${isSupervisorMode ? 'supervisor' : 'basic'} mock events`);
-  const mock = isSupervisorMode ? new SupervisorMockGenerator() : new MockEventGenerator();
-  mock.start((event) => {
-    sessionManager.handleEvent(event);
-    wsServer.broadcast(event);
-  });
+  console.log(`[mock] using '${mockMode}' mock events`);
+  if (mockMode === 'webhook') {
+    const mock = new WebhookMockGenerator();
+    mock.start(sessionManager, wsServer);
+  } else if (mockMode === 'multi') {
+    const mock = new MultiInstanceMockGenerator();
+    mock.start(sessionManager, wsServer);
+  } else {
+    const isSupervisorMode = mockMode === 'supervisor';
+    const mock = isSupervisorMode ? new SupervisorMockGenerator() : new MockEventGenerator();
+    mock.start((event) => {
+      sessionManager.handleEvent(event);
+      wsServer.broadcast(event);
+    });
+  }
 } else {
   const watcher = new SessionWatcher(claudeDir);
 

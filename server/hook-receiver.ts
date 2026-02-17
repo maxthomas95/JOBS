@@ -17,6 +17,10 @@ export function createHookRouter(sessionManager: SessionManager, wsServer: WSSer
         return;
       }
 
+      // Extract machine info before stripping
+      const machineId = typeof body.machine_id === 'string' ? body.machine_id : undefined;
+      const machineName = typeof body.machine_name === 'string' ? body.machine_name : undefined;
+
       // Strip sensitive fields
       if (typeof body.cwd === 'string') {
         body.cwd = basename(body.cwd);
@@ -24,12 +28,17 @@ export function createHookRouter(sessionManager: SessionManager, wsServer: WSSer
       if (typeof body.transcript_path === 'string') {
         body.transcript_path = basename(body.transcript_path);
       }
+      delete body.machine_id;
+      delete body.machine_name;
 
       const hasSession = sessionManager.hasSession(sessionId);
       // eslint-disable-next-line no-console
       console.log(`[hooks] ${hookEventName} for session ${sessionId.slice(0, 12)}… (known=${hasSession})`);
 
-      const event = sessionManager.handleHookEvent(hookEventName, body);
+      const event = sessionManager.handleHookEvent(hookEventName, body, {
+        machineId: machineId,
+        machineName: machineName,
+      });
       if (event) {
         wsServer.broadcast(event);
         wsServer.broadcastSnapshot();

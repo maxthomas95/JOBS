@@ -34,7 +34,7 @@ export function useWebSocket(url: string): void {
         }
 
         if (message.type === 'snapshot') {
-          useOfficeStore.getState().handleSnapshot(message.agents);
+          useOfficeStore.getState().handleSnapshot(message.agents, message.machines);
           if (message.stats) {
             useStatsStore.getState().updateStats(message.stats);
           }

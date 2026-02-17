@@ -138,6 +138,29 @@ export function AgentDetailPanel() {
         </div>
       ) : null}
 
+      {agent.provider !== 'claude' ? (
+        <div className="detail-row">
+          <span className="detail-label">Provider</span>
+          <span className="detail-value">{agent.provider === 'codex' ? 'OpenAI Codex' : agent.sourceName || 'Webhook'}</span>
+        </div>
+      ) : null}
+
+      {agent.machineName ? (
+        <div className="detail-row">
+          <span className="detail-label">Machine</span>
+          <span className="detail-value">{agent.machineName}</span>
+        </div>
+      ) : null}
+
+      {agent.sourceUrl ? (
+        <div className="detail-row">
+          <span className="detail-label">Source</span>
+          <a className="detail-value detail-link" href={agent.sourceUrl} target="_blank" rel="noopener noreferrer">
+            {agent.sourceName || 'View'}
+          </a>
+        </div>
+      ) : null}
+
       <div className="detail-row">
         <span className="detail-label">Status</span>
         <span className="detail-value" style={{ color: STATE_COLORS[agent.state] }}>

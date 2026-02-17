@@ -45,6 +45,7 @@ export class WSServer {
       agents: this.sessionManager.getSnapshot(),
       timestamp: Date.now(),
       stats: this.statsStore?.getSummary(),
+      machines: this.sessionManager.getMachines(),
     };
     const data = JSON.stringify(message);
     for (const client of this.wss.clients) {
@@ -70,6 +71,7 @@ export class WSServer {
       agents: this.sessionManager.getSnapshot(),
       timestamp: Date.now(),
       stats: this.statsStore?.getSummary(),
+      machines: this.sessionManager.getMachines(),
     };
     ws.send(JSON.stringify(message));
   }

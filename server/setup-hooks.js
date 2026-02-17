@@ -6,7 +6,8 @@
  * and writes it back. Detects platform to choose the right notify script.
  *
  * Usage:
- *   node server/setup-hooks.js          # install hooks
+ *   node server/setup-hooks.js          # install Claude Code hooks
+ *   node server/setup-hooks.js --codex  # install Codex CLI notify hook
  *   node server/setup-hooks.js --remove  # remove JOBS hooks
  *
  * Environment variables:
@@ -19,18 +20,22 @@ import { join, resolve } from 'node:path';
 
 const SETTINGS_PATH = join(homedir(), '.claude', 'settings.json');
 const HOOKS_DIR = join(homedir(), '.claude', 'hooks');
+const CODEX_CONFIG_PATH = join(homedir(), '.codex', 'config.toml');
 const JOBS_URL = process.env.JOBS_URL || 'http://localhost:8780';
 const isWindows = process.platform === 'win32';
 const removeMode = process.argv.includes('--remove');
+const codexMode = process.argv.includes('--codex');
 
 // Source hook scripts (relative to this file's directory)
 const projectRoot = resolve(import.meta.dirname, '..');
 const srcShScript = join(projectRoot, 'server', 'hooks', 'jobs-notify.sh');
 const srcJsScript = join(projectRoot, 'server', 'hooks', 'jobs-notify.js');
+const srcCodexScript = join(projectRoot, 'server', 'hooks', 'codex-notify.js');
 
 // Destination paths
 const destShScript = join(HOOKS_DIR, 'jobs-notify.sh');
 const destJsScript = join(HOOKS_DIR, 'jobs-notify.js');
+const destCodexScript = join(HOOKS_DIR, 'codex-notify.js');
 
 // Build the hook command based on platform
 function getHookCommand() {
@@ -140,6 +145,68 @@ function removeScripts() {
   }
 }
 
+// --- Codex Config Helpers ---
+
+function readCodexConfig() {
+  try {
+    return readFileSync(CODEX_CONFIG_PATH, 'utf-8');
+  } catch {
+    return '';
+  }
+}
+
+function writeCodexConfig(content) {
+  mkdirSync(join(homedir(), '.codex'), { recursive: true });
+  writeFileSync(CODEX_CONFIG_PATH, content, 'utf-8');
+}
+
+/** Remove the JOBS notify line from Codex config */
+function removeCodexNotify(content) {
+  return content
+    .split('\n')
+    .filter((line) => !line.includes('codex-notify'))
+    .join('\n');
+}
+
+function setupCodex() {
+  // Copy codex-notify.js to hooks dir
+  mkdirSync(HOOKS_DIR, { recursive: true });
+  if (existsSync(srcCodexScript)) {
+    copyFileSync(srcCodexScript, destCodexScript);
+  }
+
+  // Read existing config.toml
+  let config = readCodexConfig();
+
+  // Remove any existing JOBS notify line
+  config = removeCodexNotify(config);
+
+  // Build the notify command
+  const notifyCmd = `notify = ["node", "${destCodexScript.replace(/\\/g, '/')}"]`;
+
+  // Check if there's already a notify line
+  const hasNotify = config.split('\n').some((line) => line.trim().startsWith('notify'));
+  if (hasNotify) {
+    // Replace existing notify line
+    config = config
+      .split('\n')
+      .map((line) => (line.trim().startsWith('notify') ? notifyCmd : line))
+      .join('\n');
+  } else {
+    // Add at the top (before any section headers)
+    config = notifyCmd + '\n' + config;
+  }
+
+  writeCodexConfig(config);
+
+  console.log('[setup-hooks] Codex notify hook configured in', CODEX_CONFIG_PATH);
+  console.log('[setup-hooks] Command:', notifyCmd);
+  console.log('[setup-hooks] JOBS URL:', JOBS_URL);
+  console.log('');
+  console.log('[setup-hooks] Done! Restart Codex for the hook to take effect.');
+  console.log('[setup-hooks] To remove: node server/setup-hooks.js --remove');
+}
+
 // --- Main ---
 
 if (removeMode) {
@@ -148,7 +215,19 @@ if (removeMode) {
   removeJobsHooks(settings);
   writeSettings(settings);
   removeScripts();
+  // Also remove Codex notify if present
+  const codexConfig = readCodexConfig();
+  if (codexConfig.includes('codex-notify')) {
+    writeCodexConfig(removeCodexNotify(codexConfig));
+    console.log('[setup-hooks] Codex notify hook removed from', CODEX_CONFIG_PATH);
+  }
+  try { if (existsSync(destCodexScript)) unlinkSync(destCodexScript); } catch { /* ignore */ }
   console.log('[setup-hooks] Hooks removed from', SETTINGS_PATH);
+  process.exit(0);
+}
+
+if (codexMode) {
+  setupCodex();
   process.exit(0);
 }
 
