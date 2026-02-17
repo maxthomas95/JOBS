@@ -281,7 +281,8 @@ export class SessionManager {
       } else if (mode === 'reading') {
         this.applyState(agent, 'reading', desk, context);
       } else if (mode === 'delegating') {
-        this.applyState(agent, 'delegating', desk, context);
+        const supervisorDesk = STATIONS.desks[STATIONS.desks.length - 1];
+        this.applyState(agent, 'delegating', supervisorDesk, context);
       } else if (mode === 'thinking') {
         this.applyState(agent, 'thinking', STATIONS.whiteboard, context);
       } else {
@@ -455,6 +456,9 @@ export class SessionManager {
   }
 
   private reserveDesk(sessionId: string, parentDeskIndex: number | null): number | null {
+    // Last desk is reserved as the supervisor desk — never assigned to regular agents
+    const supervisorDeskIndex = STATIONS.desks.length - 1;
+
     // If this is a sub-agent, prefer the nearest available desk to the parent.
     if (
       parentDeskIndex !== null &&
@@ -466,6 +470,7 @@ export class SessionManager {
       let bestDistance = Number.POSITIVE_INFINITY;
 
       for (let i = 0; i < this.deskAssignments.length; i += 1) {
+        if (i === supervisorDeskIndex) continue;
         if (this.deskAssignments[i] !== null) continue;
         const candidateDesk = STATIONS.desks[i];
         if (!candidateDesk) continue;
@@ -482,8 +487,9 @@ export class SessionManager {
       }
     }
 
-    // Fallback: first available desk.
+    // Fallback: first available desk (skip supervisor desk).
     for (let i = 0; i < this.deskAssignments.length; i += 1) {
+      if (i === supervisorDeskIndex) continue;
       if (this.deskAssignments[i] === null) {
         this.deskAssignments[i] = sessionId;
         return i;

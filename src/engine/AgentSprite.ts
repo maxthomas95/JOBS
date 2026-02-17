@@ -431,8 +431,12 @@ export class AgentSpriteManager {
    * Generate waypoints to return the agent to their own desk.
    */
   private generateReturnPath(agent: Agent, visual: AgentVisual, sprite: AnimatedGIF): void {
-    if (agent.deskIndex !== null) {
-      const deskTile = STATIONS.desks[agent.deskIndex];
+    // Delegating agents return to the supervisor desk, not their own
+    const targetDeskIndex = agent.state === 'delegating'
+      ? STATIONS.desks.length - 1
+      : agent.deskIndex;
+    if (targetDeskIndex !== null) {
+      const deskTile = STATIONS.desks[targetDeskIndex];
       const deskWorld = tileToWorld(deskTile);
       const path = findPath({ x: sprite.x, y: sprite.y }, deskWorld);
       visual.waypoints = path.length > 0 ? path : [deskWorld];
@@ -636,9 +640,12 @@ export class AgentSpriteManager {
       return true;
     }
 
-    // All children visited — walk back to own desk
-    if (agent.deskIndex != null) {
-      const ownDeskTile = STATIONS.desks[agent.deskIndex];
+    // All children visited — walk back to supervisor desk (if delegating) or own desk
+    const returnDeskIndex = agent.state === 'delegating'
+      ? STATIONS.desks.length - 1
+      : agent.deskIndex;
+    if (returnDeskIndex != null) {
+      const ownDeskTile = STATIONS.desks[returnDeskIndex];
       const ownWorld = tileToWorld(ownDeskTile);
 
       if (visual.patrolWaypoints.length === 0) {

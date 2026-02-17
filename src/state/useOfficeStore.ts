@@ -86,7 +86,10 @@ function targetFor(agent: Agent, state: AgentState, _tool?: string): Point {
   if (state === 'error') {
     return agent.position;
   }
-  if (state === 'entering' || state === 'coding' || state === 'idle' || state === 'delegating') {
+  if (state === 'delegating') {
+    return tileToWorld(STATIONS.desks[STATIONS.desks.length - 1]);
+  }
+  if (state === 'entering' || state === 'coding' || state === 'idle') {
     if (agent.deskIndex !== null) {
       return tileToWorld(STATIONS.desks[agent.deskIndex]);
     }
