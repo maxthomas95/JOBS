@@ -103,7 +103,7 @@ VISION.md has no design for the 0-session state. Consider the usage pattern:
 
 1. **The office itself should still be alive:**
    - Clock showing real time (ticking)
-   - Occasional ambient flicker on desk monitors (screensaver mode)
+   - Occasional ambient flicker on desk monitors
    - Steam/particle effect on coffee machine
    - Lights on, nobody home aesthetic
 

@@ -14,6 +14,7 @@ interface OfficeState {
   focusedAgentId: string | null;
   focusedAgentIds: Set<string>;
   selectedAgentId: string | null;
+  followedAgentId: string | null;
   notificationsEnabled: boolean;
   agentHistory: Map<string, StateEntry[]>;
   agentToolCounts: Map<string, Map<string, number>>;
@@ -29,6 +30,8 @@ interface OfficeState {
   focusAgent: (id: string | null) => void;
   focusTeam: (supervisorId: string) => void;
   selectAgent: (id: string | null) => void;
+  followAgent: (id: string) => void;
+  unfollowAgent: () => void;
   toggleNotifications: () => void;
 }
 
@@ -112,6 +115,7 @@ export const useOfficeStore = create<OfficeState>()(
     focusedAgentId: null,
     focusedAgentIds: new Set<string>(),
     selectedAgentId: null,
+    followedAgentId: null,
     notificationsEnabled: false,
     agentHistory: new Map<string, StateEntry[]>(),
     agentToolCounts: new Map<string, Map<string, number>>(),
@@ -145,7 +149,12 @@ export const useOfficeStore = create<OfficeState>()(
         }
         const next = new Map(state.agents);
         next.delete(id);
-        return { agents: next };
+        // Auto-unfollow if the removed agent was being followed
+        const patch: Partial<OfficeState> = { agents: next };
+        if (state.followedAgentId === id) {
+          patch.followedAgentId = null;
+        }
+        return patch;
       });
     },
 
@@ -354,6 +363,14 @@ export const useOfficeStore = create<OfficeState>()(
 
     selectAgent: (id) => {
       set({ selectedAgentId: id });
+    },
+
+    followAgent: (id) => {
+      set({ followedAgentId: id });
+    },
+
+    unfollowAgent: () => {
+      set({ followedAgentId: null });
     },
 
     toggleNotifications: () => {

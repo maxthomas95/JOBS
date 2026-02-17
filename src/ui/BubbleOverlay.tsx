@@ -120,7 +120,7 @@ export function BubbleOverlay({ canvasRef }: { canvasRef: React.RefObject<HTMLCa
         const overlayRect = overlay.getBoundingClientRect();
         const offsetX = rect.left - overlayRect.left;
         const offsetY = rect.top - overlayRect.top;
-        // Account for the world container's transform (screensaver zoom/pan)
+        // Account for the world container's transform (follow-mode zoom/pan)
         const wt = worldTransform;
         const cssScaleX = rect.width / 320;
         const cssScaleY = rect.height / 240;

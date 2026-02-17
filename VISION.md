@@ -393,7 +393,7 @@ open http://your-proxmox-host:8780
 
 ## v2 Roadmap
 
-> v1 is a screensaver. v2 makes it a dashboard — you should be able to glance at it and know exactly what every agent is doing, whether any need your attention, and what they're working on.
+> v1 is a passive display. v2 makes it a dashboard — you should be able to glance at it and know exactly what every agent is doing, whether any need your attention, and what they're working on.
 
 ### v2-M1: Agent Clarity — "What are they actually doing?"
 > The single highest-impact upgrade. Surface the data we already have.
@@ -575,10 +575,10 @@ open http://your-proxmox-host:8780
   - Sessions today, total session hours, files touched, tools used breakdown
   - Per-agent history: past sessions, average duration, most-used tools
   - Stored in SQLite or JSON file, survives restarts
-- [x] **"Screensaver mode"** for wall-mounted displays
-  - Auto-zoom to active area, hide HUD when idle, cinematic camera pans
-  - Show ambient stats overlay (sessions today, uptime)
-  - Perfect for office TV or Proxmox display
+- [x] **Follow mode** — single-agent camera tracking
+  - Click FOLLOW on any agent in the roster to zoom in (1.8x) and track them
+  - Smooth lerp camera with gentle drift, stays active until toggled off
+  - Auto-unfollows when agent disconnects, smooth exit transition back to default view
 - [ ] **Generic webhook adapter** — accept events from any source via HTTP POST
   - Builds on the same `/api/hooks` endpoint used by Claude Code hooks
   - Standardized event schema, map to office behaviors

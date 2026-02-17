@@ -5,7 +5,7 @@ import { useDayNightStore } from '../state/useDayNightStore.js';
 import { AgentSpriteManager, worldTransform } from './AgentSprite.js';
 import { AmbientEffects } from './AmbientEffects.js';
 import type { DayNightCycle } from './DayNightCycle.js';
-import type { ScreensaverMode } from './ScreensaverMode.js';
+import type { FollowMode } from './FollowMode.js';
 import { audioManager } from '../audio/AudioManager.js';
 
 export class AnimationController {
@@ -14,7 +14,7 @@ export class AnimationController {
   private ticker: Ticker | null = null;
   private spriteManager: AgentSpriteManager | null = null;
   private ambientEffects: AmbientEffects | null = null;
-  private screensaverMode: ScreensaverMode | null = null;
+  private followMode: FollowMode | null = null;
   /** Track previous agent states to detect transitions for one-shot sounds */
   private prevStates = new Map<string, string>();
   /** Track when agents entered 'entering' state (for footstep cutoff) */
@@ -25,9 +25,9 @@ export class AnimationController {
     private readonly layer: Container,
     private readonly ambientLayer: Container,
     private readonly dayNightCycle?: DayNightCycle,
-    screensaverMode?: ScreensaverMode,
+    followMode?: FollowMode,
   ) {
-    this.screensaverMode = screensaverMode ?? null;
+    this.followMode = followMode ?? null;
   }
 
   async init(): Promise<void> {
@@ -63,8 +63,8 @@ export class AnimationController {
     this.ticker.add(this.onTick);
   }
 
-  getScreensaver(): ScreensaverMode | null {
-    return this.screensaverMode;
+  getFollowMode(): FollowMode | null {
+    return this.followMode;
   }
 
   destroy(): void {
@@ -74,7 +74,7 @@ export class AnimationController {
       this.ticker.remove(this.onTick);
     }
     this.ambientEffects?.destroy();
-    this.screensaverMode?.destroy();
+    this.followMode?.destroy();
   }
 
   private readonly onTick = (ticker: Ticker): void => {
@@ -98,7 +98,7 @@ export class AnimationController {
       worldTransform.posX = world.position.x;
       worldTransform.posY = world.position.y;
     }
-    this.screensaverMode?.update(deltaSeconds);
+    this.followMode?.update(deltaSeconds);
   };
 
   private updateAudioLoops(_deltaMS: number, agents: Map<string, Agent>): void {

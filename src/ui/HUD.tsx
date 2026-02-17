@@ -128,6 +128,9 @@ export function HUD() {
   const focusAgent = useOfficeStore((state) => state.focusAgent);
   const focusTeam = useOfficeStore((state) => state.focusTeam);
   const selectAgent = useOfficeStore((state) => state.selectAgent);
+  const followedAgentId = useOfficeStore((state) => state.followedAgentId);
+  const followAgent = useOfficeStore((state) => state.followAgent);
+  const unfollowAgent = useOfficeStore((state) => state.unfollowAgent);
   const notificationsEnabled = useOfficeStore((state) => state.notificationsEnabled);
   const toggleNotifications = useOfficeStore((state) => state.toggleNotifications);
   const events = useEventStore((state) => state.events);
@@ -147,20 +150,9 @@ export function HUD() {
 
   const [now, setNow] = useState(Date.now());
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set());
-  const [screensaverActive, setScreensaverActive] = useState(false);
   useEffect(() => {
     const id = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(id);
-  }, []);
-  useEffect(() => {
-    const onEnter = () => setScreensaverActive(true);
-    const onExit = () => setScreensaverActive(false);
-    window.addEventListener('screensaver-enter', onEnter);
-    window.addEventListener('screensaver-exit', onExit);
-    return () => {
-      window.removeEventListener('screensaver-enter', onEnter);
-      window.removeEventListener('screensaver-exit', onExit);
-    };
   }, []);
 
   const toggleProject = useCallback((project: string) => {
@@ -180,7 +172,8 @@ export function HUD() {
     const parentName = isChild ? (agents.get(agent.parentId!)?.name || agent.parentId!.slice(0, 6)) : null;
     const activeChildren = agent.childIds.filter((id) => agents.has(id)).length;
     const supervisor = isSupervisor(agent, agents);
-    const rowClasses = `agent-row${isChild ? ' agent-child' : ''}${supervisor ? ' supervisor' : ''}`;
+    const isFollowed = followedAgentId === agent.id;
+    const rowClasses = `agent-row${isChild ? ' agent-child' : ''}${supervisor ? ' supervisor' : ''}${isFollowed ? ' following' : ''}`;
 
     const handleClick = () => {
       if (supervisor) {
@@ -189,6 +182,15 @@ export function HUD() {
         focusAgent(agent.id);
       }
       selectAgent(agent.id);
+    };
+
+    const handleFollow = (e: React.MouseEvent) => {
+      e.stopPropagation();
+      if (isFollowed) {
+        unfollowAgent();
+      } else {
+        followAgent(agent.id);
+      }
     };
 
     return (
@@ -214,17 +216,22 @@ export function HUD() {
         {agent.waitingForHuman ? (
           <span className="waiting-badge">NEEDS INPUT</span>
         ) : null}
+        <button
+          className={`follow-btn${isFollowed ? ' active' : ''}`}
+          onClick={handleFollow}
+          title={isFollowed ? 'Stop following' : 'Follow this agent'}
+        >
+          {isFollowed ? 'FOLLOWING' : 'FOLLOW'}
+        </button>
         <span className="agent-uptime">{formatUptime(agent.lastEventAt, now)}</span>
       </div>
     );
   };
 
-  const screensaverStats = screensaverActive
-    ? `${count} ${count === 1 ? 'session' : 'sessions'} | ${formatUptime(0, now)} uptime`
-    : '';
+  const followedAgent = followedAgentId ? agents.get(followedAgentId) : null;
 
   return (
-    <div className={`hud-overlay${screensaverActive ? ' screensaver-active' : ''}`}>
+    <div className="hud-overlay">
       <header className="hud-header">
         <h1>J.O.B.S. ONLINE</h1>
         <div className="hud-header-right">
@@ -267,13 +274,6 @@ export function HUD() {
           >
             {themeLabel}
           </button>
-          <button
-            className="daynight-toggle"
-            onClick={() => window.dispatchEvent(new CustomEvent('screensaver-toggle'))}
-            title="Toggle screensaver"
-          >
-            SCREEN
-          </button>
           <ConnectionStatus />
         </div>
       </header>
@@ -314,8 +314,11 @@ export function HUD() {
         </div>
       ) : null}
 
-      {screensaverActive ? (
-        <div className="screensaver-stats">{screensaverStats}</div>
+      {followedAgent ? (
+        <div className="follow-indicator">
+          <span>Following: {followedAgent.name || followedAgent.id.slice(0, 8)}</span>
+          <button onClick={unfollowAgent} className="follow-stop">&times;</button>
+        </div>
       ) : null}
     </div>
   );

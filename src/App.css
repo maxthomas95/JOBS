@@ -65,11 +65,6 @@
   transition: opacity 0.5s ease-in-out;
 }
 
-.hud-overlay.screensaver-active {
-  opacity: 0;
-  transition: opacity 1.5s ease-in-out;
-  pointer-events: none;
-}
 
 .hud-header {
   display: flex;
@@ -844,21 +839,83 @@
   font-family: 'Courier New', monospace !important;
 }
 
-.screensaver-stats {
+/* Follow mode */
+.follow-indicator {
   position: absolute;
-  bottom: 2rem;
+  bottom: 1.5rem;
   left: 50%;
   transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3rem 0.8rem;
+  background: var(--panel-bg, rgba(0, 0, 0, 0.7));
+  border: 1px solid var(--panel-border, rgba(255, 255, 255, 0.15));
+  border-radius: 4px;
   font-size: 0.7rem;
-  opacity: 0.4;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
-  pointer-events: none;
-  transition: opacity 1s ease-in-out;
+  color: var(--text, #e0e0e0);
+  pointer-events: auto;
+  animation: follow-fade-in 0.4s ease-out;
 }
 
-.screensaver-active .screensaver-stats {
+@keyframes follow-fade-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(8px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+.follow-stop {
+  background: none;
+  border: none;
+  color: var(--text, #e0e0e0);
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 0 0.2rem;
   opacity: 0.6;
+  line-height: 1;
+}
+
+.follow-stop:hover {
+  opacity: 1;
+  color: #ff6b6b;
+}
+
+.follow-btn {
+  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: var(--text, #e0e0e0);
+  font-size: 0.55rem;
+  padding: 0.1rem 0.35rem;
+  border-radius: 3px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.2s;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  pointer-events: auto;
+  margin-left: auto;
+}
+
+.agent-row:hover .follow-btn {
+  opacity: 0.7;
+}
+
+.follow-btn:hover {
+  opacity: 1 !important;
+  border-color: #4fc3f7;
+  color: #4fc3f7;
+}
+
+.follow-btn.active {
+  opacity: 1;
+  border-color: #4fc3f7;
+  color: #4fc3f7;
+  background: rgba(79, 195, 247, 0.15);
+}
+
+.agent-row.following {
+  border-left: 2px solid #4fc3f7;
 }
 
 @media (max-width: 640px) {

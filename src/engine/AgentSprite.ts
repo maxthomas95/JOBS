@@ -10,7 +10,7 @@ import claudeGifUrl from '../assets/claude.gif';
 /** Current sprite positions in world coordinates, updated every frame. Used by HTML bubble overlay. */
 export const spritePositions = new Map<string, Point>();
 
-/** Stage/world container transform, updated every frame. Used by BubbleOverlay for screensaver zoom. */
+/** Stage/world container transform, updated every frame. Used by BubbleOverlay for follow-mode zoom. */
 export const worldTransform = { scaleX: 1, scaleY: 1, pivotX: 0, pivotY: 0, posX: 0, posY: 0 };
 
 /** Active supervisor check-ins, keyed by supervisor agentId. Used by BubbleOverlay. */

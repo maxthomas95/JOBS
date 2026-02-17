@@ -78,7 +78,7 @@ Context loss happens when:
 - GPU pressure from other applications
 - Plugging/unplugging external monitors
 
-**For J.O.B.S. specifically:** This is a dashboard meant to run on a wall-mounted display ("screensaver mode" is in the v2 roadmap). Extended backgrounding is less likely, but GPU pressure recovery matters.
+**For J.O.B.S. specifically:** This is a dashboard meant to run alongside other work (with follow mode for tracking individual agents). Extended backgrounding is less likely, but GPU pressure recovery matters.
 
 **Recommendation:**
 1. Add a `webglcontextlost` event listener that shows a "Reconnecting..." overlay

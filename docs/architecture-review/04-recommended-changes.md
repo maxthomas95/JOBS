@@ -140,7 +140,7 @@ Add:
 **Location:** After Office Layout section
 
 Design the 0-session state:
-- Office rendered with lights on, screens showing screensavers, clock ticking
+- Office rendered with lights on, screens idle, clock ticking
 - Coffee machine with steam particle effect
 - HUD: "J.O.B.S. ONLINE" (green), "No active sessions — watching for activity"
 - First-run: "No Claude Code sessions detected" with setup hint
