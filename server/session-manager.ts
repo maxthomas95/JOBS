@@ -362,9 +362,12 @@ export class SessionManager {
     }
 
     if (hookEventName === 'SessionStart') {
+      // Prefer cwd (human-readable dir name, already basename'd by hook-receiver)
+      // over project (often undefined from hooks, causing UUID fallback)
+      const project = (payload.cwd as string) || (payload.project as string) || undefined;
       const event = createSessionEvent(sessionId, 'started', {
         agentId: sessionId,
-        project: payload.project as string | undefined,
+        project,
         source: 'hook',
       });
       this.handleEvent(event);
