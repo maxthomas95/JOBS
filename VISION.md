@@ -602,11 +602,11 @@ open http://your-proxmox-host:8780
 ### v2-M7: Stabilization & Polish — "Make it bulletproof"
 > Freeze features. Hunt every bug, smooth every edge, answer every "wait, why does it do that?" before moving on.
 
-- [ ] **Bug fixes & edge cases** — populate as discovered during daily use
-- [ ] **Performance profiling** — memory leaks, ticker efficiency, WebSocket reconnect reliability
-- [ ] **UX paper cuts** — anything that feels janky or unintuitive
-- [ ] **Real-world stress testing** — long-running sessions, rapid agent churn, 10 simultaneous agents, browser tab sleep/wake
-- [ ] **Documentation pass** — make sure README reflects the actual current state
+- [x] **Bug fixes & edge cases** — 5 critical bugs fixed (stale setTimeout eviction, client stale timers, tab wake delta spike, idle pose drift, stats index rebuild)
+- [x] **Performance profiling** — memory leaks plugged (unbounded Maps, toolNameCache, Howl unload, JSONL streaming), ticker efficiency (DayNightCycle/clock caching, delta cap), WebSocket exponential backoff
+- [x] **UX paper cuts** — scrollable agent list/detail panel, theme-aware CSS variables, shared STATE_LABELS, feed animations, reconnect indicator, follow/stats overlap fix
+- [x] **Real-world stress testing** — snapshot broadcast throttle, WS maxPayload, graceful shutdown, fallback name collision guard, pendingSpawns filter, file cleanup on unlink
+- [x] **Documentation pass** — make sure README reflects the actual current state
 - **Deliverable:** A rock-solid daily driver — zero surprises
 
 ### v2-M8: Security Remediation — "Lock it down"

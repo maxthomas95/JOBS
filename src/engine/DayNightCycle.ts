@@ -37,6 +37,8 @@ export class DayNightCycle {
   readonly container: Container;
   private _enabled = true;
   private _speedMultiplier = 1;
+  private lastColor = -1;
+  private lastAlpha = -1;
 
   constructor() {
     this.container = new Container();
@@ -141,6 +143,12 @@ export class DayNightCycle {
   }
 
   private drawOverlay(color: number, alpha: number): void {
+    if (color === this.lastColor && Math.abs(alpha - this.lastAlpha) < 0.001) {
+      return;
+    }
+    this.lastColor = color;
+    this.lastAlpha = alpha;
+
     this.overlay.clear();
     if (alpha <= 0.001) {
       this.overlay.alpha = 0;

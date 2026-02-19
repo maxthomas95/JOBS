@@ -8,6 +8,7 @@ interface DailyRecord {
 }
 
 interface SessionRecord {
+  sessionId?: string;
   name: string;
   project: string | null;
   startedAt: number;
@@ -48,9 +49,8 @@ export class StatsStore {
     // Rebuild sessionIndex from any un-ended sessions
     for (let i = 0; i < this.data.agentHistory.length; i++) {
       const rec = this.data.agentHistory[i];
-      if (rec.endedAt === null) {
-        // Use name as key since we don't persist session IDs
-        this.sessionIndex.set(rec.name, i);
+      if (rec.endedAt === null && rec.sessionId) {
+        this.sessionIndex.set(rec.sessionId, i);
       }
     }
     // Auto-flush every 60 seconds
@@ -68,6 +68,7 @@ export class StatsStore {
 
     const idx = this.data.agentHistory.length;
     this.data.agentHistory.push({
+      sessionId,
       name,
       project,
       startedAt: Date.now(),

@@ -277,7 +277,7 @@ export class AgentSpriteManager {
       }
 
       // --- Crown for supervisor with active children ---
-      this.updateCrown(agent, visual, agents);
+      this.updateCrown(agent, visual, agents, hasActiveChildren);
 
       // Export sprite position for HTML bubble overlay
       spritePositions.set(id, { x: sprite.x, y: sprite.y });
@@ -730,8 +730,10 @@ export class AgentSpriteManager {
   /**
    * Show/hide/position the crown above the supervisor's head.
    */
-  private updateCrown(agent: Agent, visual: AgentVisual, agents: Map<string, Agent>): void {
-    const hasActiveChildren = agent.childIds.some((cid) => agents.has(cid));
+  private updateCrown(agent: Agent, visual: AgentVisual, _agents: Map<string, Agent>, hasActiveChildren?: boolean): void {
+    if (hasActiveChildren === undefined) {
+      hasActiveChildren = agent.childIds.some((cid) => _agents.has(cid));
+    }
     const sprite = visual.sprite;
 
     if (hasActiveChildren) {
@@ -756,41 +758,52 @@ export class AgentSpriteManager {
     const sprite = visual.sprite;
     visual.phase += deltaSeconds * 8;
 
+    // Use targetPosition as fixed base to prevent cumulative drift
+    const baseX = agent.targetPosition?.x ?? sprite.x;
+    const baseY = agent.targetPosition?.y ?? sprite.y;
+
     // Reset tint in case it was set by a previous error state
     sprite.tint = 0xffffff;
 
     if (agent.state === 'thinking') {
       sprite.stop();
-      sprite.x += Math.sin(visual.phase) * 0.1;
+      sprite.x = baseX + Math.sin(visual.phase) * 0.1;
+      sprite.y = baseY;
       return;
     }
 
     if (agent.state === 'terminal') {
       sprite.stop();
-      sprite.y += Math.sin(visual.phase * 2) * 0.3;
+      sprite.x = baseX;
+      sprite.y = baseY + Math.sin(visual.phase * 2) * 0.3;
       return;
     }
 
     if (agent.state === 'coding' || agent.state === 'reading') {
       sprite.stop();
-      sprite.y += Math.sin(visual.phase) * 0.3;
+      sprite.x = baseX;
+      sprite.y = baseY + Math.sin(visual.phase) * 0.3;
       return;
     }
 
     if (agent.state === 'searching') {
       sprite.stop();
-      sprite.x += Math.sin(visual.phase * 1.5) * 0.15;
+      sprite.x = baseX + Math.sin(visual.phase * 1.5) * 0.15;
+      sprite.y = baseY;
       return;
     }
 
     if (agent.state === 'cooling') {
       sprite.stop();
-      sprite.y += Math.sin(visual.phase * 0.8) * 0.4;
+      sprite.x = baseX;
+      sprite.y = baseY + Math.sin(visual.phase * 0.8) * 0.4;
       return;
     }
 
     if (agent.state === 'error') {
       sprite.stop();
+      sprite.x = baseX;
+      sprite.y = baseY;
       sprite.tint = Math.sin(visual.phase * 3) > 0 ? 0xff4444 : 0xffffff;
       return;
     }
@@ -800,7 +813,8 @@ export class AgentSpriteManager {
       // Pulsing orange tint
       sprite.tint = Math.sin(visual.phase * 2) > 0 ? 0xff9800 : 0xffffff;
       // Vertical bob
-      sprite.y += Math.sin(visual.phase * 1.5) * 0.5;
+      sprite.x = baseX;
+      sprite.y = baseY + Math.sin(visual.phase * 1.5) * 0.5;
       return;
     }
 
@@ -813,12 +827,15 @@ export class AgentSpriteManager {
       const b = Math.round(0xff - (0xff - 0xbc) * t * 0.4);
       sprite.tint = (r << 16) | (g << 8) | b;
       // Slow bob
-      sprite.y += Math.sin(visual.phase * 0.8) * 0.3;
+      sprite.x = baseX;
+      sprite.y = baseY + Math.sin(visual.phase * 0.8) * 0.3;
       return;
     }
 
     // Default idle (delegating, waiting, etc.)
     sprite.stop();
+    sprite.x = baseX;
+    sprite.y = baseY;
   }
 
 }

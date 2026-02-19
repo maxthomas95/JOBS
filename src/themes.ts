@@ -11,6 +11,7 @@ export interface Theme {
     panelBorder: string;
     text: string;
     textMuted: string;
+    accentColor: string;
   };
 }
 
@@ -28,6 +29,7 @@ export const THEMES: Theme[] = [
       panelBorder: '#4a5167',
       text: '#e8edf5',
       textMuted: 'rgba(255, 255, 255, 0.5)',
+      accentColor: '#4fc3f7',
     },
   },
   {
@@ -43,6 +45,7 @@ export const THEMES: Theme[] = [
       panelBorder: '#c4b9a8',
       text: '#2c2418',
       textMuted: 'rgba(44, 36, 24, 0.5)',
+      accentColor: '#0288d1',
     },
   },
   {
@@ -58,6 +61,7 @@ export const THEMES: Theme[] = [
       panelBorder: '#00ffff55',
       text: '#e0f0ff',
       textMuted: 'rgba(0, 255, 255, 0.5)',
+      accentColor: '#00e5ff',
     },
   },
   {
@@ -73,6 +77,7 @@ export const THEMES: Theme[] = [
       panelBorder: '#00ff4133',
       text: '#00ff41',
       textMuted: 'rgba(0, 255, 65, 0.45)',
+      accentColor: '#4fc3f7',
     },
   },
 ];

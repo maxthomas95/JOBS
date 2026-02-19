@@ -2,20 +2,7 @@ import { Fragment, useEffect, useRef, useState } from 'react';
 import { useOfficeStore } from '../state/useOfficeStore.js';
 import { spritePositions, supervisorCheckIns, worldTransform } from '../engine/AgentSprite.js';
 import type { Agent, AgentState } from '../types/agent.js';
-
-const STATE_COLORS: Record<string, string> = {
-  thinking: '#7c4dff',
-  terminal: '#2ee65e',
-  searching: '#ffa726',
-  coding: '#42a5f5',
-  reading: '#42a5f5',
-  error: '#ff4444',
-  waiting: '#ffeb3b',
-  needsApproval: '#ff9800',
-  compacting: '#ab47bc',
-  cooling: '#90a4ae',
-  delegating: '#ce93d8',
-};
+import { STATE_COLORS } from './stateLabels.js';
 
 function formatElapsed(ms: number): string {
   const totalSec = Math.floor(ms / 1000);
@@ -115,6 +102,10 @@ export function BubbleOverlay({ canvasRef }: { canvasRef: React.RefObject<HTMLCa
     const tick = () => {
       const canvas = canvasRef.current;
       const overlay = overlayRef.current;
+      if (spritePositions.size === 0) {
+        frameId = requestAnimationFrame(tick);
+        return;
+      }
       if (canvas && overlay) {
         const rect = canvas.getBoundingClientRect();
         const overlayRect = overlay.getBoundingClientRect();

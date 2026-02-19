@@ -36,6 +36,7 @@ interface OfficeState {
   followAgent: (id: string) => void;
   unfollowAgent: () => void;
   toggleNotifications: () => void;
+  clearAgents: () => void;
 }
 
 function classifyTool(toolName: string): AgentState {
@@ -114,6 +115,8 @@ export function groupByMachine(agents: Agent[]): Map<string, Agent[]> {
 
 let focusTimer: ReturnType<typeof setTimeout> | null = null;
 let notificationPermissionRequested = false;
+/** Timers for agents in 'leaving' state — cleared if agent is resurrected */
+const leavingTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 function sendBrowserNotification(body: string) {
   if (typeof Notification === 'undefined') return;
@@ -162,14 +165,32 @@ export const useOfficeStore = create<OfficeState>()(
     },
 
     removeAgent: (id) => {
+      // Clear leaving timer if any
+      const timer = leavingTimers.get(id);
+      if (timer) {
+        clearTimeout(timer);
+        leavingTimers.delete(id);
+      }
       set((state) => {
         if (!state.agents.has(id)) {
           return state;
         }
         const next = new Map(state.agents);
         next.delete(id);
+        // Clean up per-agent tracking Maps
+        const nextHistory = new Map(state.agentHistory);
+        nextHistory.delete(id);
+        const nextToolCounts = new Map(state.agentToolCounts);
+        nextToolCounts.delete(id);
+        const nextToolTime = new Map(state.agentToolTime);
+        nextToolTime.delete(id);
         // Auto-unfollow if the removed agent was being followed
-        const patch: Partial<OfficeState> = { agents: next };
+        const patch: Partial<OfficeState> = {
+          agents: next,
+          agentHistory: nextHistory,
+          agentToolCounts: nextToolCounts,
+          agentToolTime: nextToolTime,
+        };
         if (state.followedAgentId === id) {
           patch.followedAgentId = null;
         }
@@ -188,10 +209,21 @@ export const useOfficeStore = create<OfficeState>()(
         const recalcTarget = targetFor(agent, agent.state);
         map.set(agent.id, { ...agent, targetPosition: recalcTarget });
         const prev = prevAgents.get(agent.id);
+        // Cancel leaving timer if agent reappears in snapshot as non-leaving
+        if (prev?.state === 'leaving' && agent.state !== 'leaving') {
+          const lt = leavingTimers.get(agent.id);
+          if (lt) {
+            clearTimeout(lt);
+            leavingTimers.delete(agent.id);
+          }
+        }
         // Record state change in history when snapshot introduces a new state
         if (prev && agent.state !== prev.state) {
           const history = nextHistory.get(agent.id) ?? [];
           history.push({ state: agent.state, timestamp: Date.now() });
+          if (history.length > 200) {
+            history.splice(0, history.length - 200);
+          }
           nextHistory.set(agent.id, history);
         }
         // Notify if agent just became waiting-for-human
@@ -281,9 +313,14 @@ export const useOfficeStore = create<OfficeState>()(
         } else {
           patch.state = 'leaving';
           patch.targetPosition = tileToWorld(STATIONS.door);
-          setTimeout(() => {
+          // Clear any existing leaving timer before creating a new one
+          const existingTimer = leavingTimers.get(existing.id);
+          if (existingTimer) clearTimeout(existingTimer);
+          const leavingTimer = setTimeout(() => {
+            leavingTimers.delete(existing.id);
             get().removeAgent(existing.id);
           }, 2000);
+          leavingTimers.set(existing.id, leavingTimer);
         }
       } else if (event.type === 'activity') {
         if (event.action === 'thinking') {
@@ -327,14 +364,28 @@ export const useOfficeStore = create<OfficeState>()(
         patch.state = 'error';
       }
 
+      // Collect all state mutations into a single set() call to avoid multiple re-renders
+      const storePatch: Partial<OfficeState> = {};
+
       if (patch.state && patch.state !== existing.state) {
+        // Cancel leaving timer if agent is resurrected (leaving → any other state)
+        if (existing.state === 'leaving' && patch.state !== 'leaving') {
+          const lt = leavingTimers.get(existing.id);
+          if (lt) {
+            clearTimeout(lt);
+            leavingTimers.delete(existing.id);
+          }
+        }
         patch.stateChangedAt = Date.now();
         // Track state history
         const history = state.agentHistory.get(existing.id) ?? [];
         history.push({ state: patch.state, timestamp: Date.now() });
+        if (history.length > 200) {
+          history.splice(0, history.length - 200);
+        }
         const nextHistory = new Map(state.agentHistory);
         nextHistory.set(existing.id, history);
-        set({ agentHistory: nextHistory });
+        storePatch.agentHistory = nextHistory;
       }
 
       // Track tool counts and time
@@ -344,12 +395,13 @@ export const useOfficeStore = create<OfficeState>()(
           counts.set(event.tool, (counts.get(event.tool) ?? 0) + 1);
           const nextCounts = new Map(state.agentToolCounts);
           nextCounts.set(existing.id, counts);
+          storePatch.agentToolCounts = nextCounts;
 
           // Record start time for duration tracking
           const nextPending = new Map(state.pendingToolStarts);
           const key = event.toolUseId ?? `${existing.id}:${event.tool}:${event.timestamp}`;
           nextPending.set(key, event.timestamp);
-          set({ agentToolCounts: nextCounts, pendingToolStarts: nextPending });
+          storePatch.pendingToolStarts = nextPending;
         } else if (event.status === 'completed' || event.status === 'error') {
           // Compute elapsed time from matching start
           const key = event.toolUseId ?? '';
@@ -360,14 +412,19 @@ export const useOfficeStore = create<OfficeState>()(
             times.set(event.tool, (times.get(event.tool) ?? 0) + elapsed);
             const nextTimes = new Map(state.agentToolTime);
             nextTimes.set(existing.id, times);
+            storePatch.agentToolTime = nextTimes;
             const nextPending = new Map(state.pendingToolStarts);
             nextPending.delete(key);
-            set({ agentToolTime: nextTimes, pendingToolStarts: nextPending });
+            storePatch.pendingToolStarts = nextPending;
           }
         }
       }
 
-      state.updateAgent(existing.id, patch);
+      // Apply agent update + all accumulated patches in a single set()
+      const nextAgents = new Map(state.agents);
+      nextAgents.set(existing.id, { ...existing, ...patch });
+      storePatch.agents = nextAgents;
+      set(storePatch);
     },
 
     setGroupMode: (mode) => {
@@ -418,6 +475,14 @@ export const useOfficeStore = create<OfficeState>()(
         Notification.requestPermission();
       }
       set({ notificationsEnabled: next });
+    },
+
+    clearAgents: () => {
+      set({
+        agents: new Map(),
+        followedAgentId: null,
+        selectedAgentId: null,
+      });
     },
   })),
     { name: 'office' },

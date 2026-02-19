@@ -7,7 +7,17 @@ import {
 import type { RawContentBlock, RawJsonlEvent } from './types.js';
 
 /** Track toolUseId → toolName so we can label completion events */
-const toolNameCache = new Map<string, string>();
+const toolNameCache = new Map<string, { name: string; ts: number }>();
+
+/** Remove cache entries older than 5 minutes */
+export function cleanToolNameCache(): void {
+  const cutoff = Date.now() - 5 * 60 * 1000;
+  for (const [key, entry] of toolNameCache.entries()) {
+    if (entry.ts < cutoff) {
+      toolNameCache.delete(key);
+    }
+  }
+}
 
 function getMeta(raw: RawJsonlEvent): { sessionId: string; agentId: string; timestamp: number } {
   const sessionId = String(raw.input?._sessionId ?? raw.toolUseId ?? 'unknown');
@@ -85,7 +95,7 @@ function assistantEvents(raw: RawJsonlEvent): PixelEvent[] {
       const context = extractSafeContext(tool, parsed.input);
       // Cache tool name for matching on completion
       if (parsed.id) {
-        toolNameCache.set(parsed.id, tool);
+        toolNameCache.set(parsed.id, { name: tool, ts: Date.now() });
       }
       events.push(
         createToolEvent(sessionId, agentId, timestamp, {
@@ -109,7 +119,7 @@ function userEvents(raw: RawJsonlEvent): PixelEvent[] {
   for (const block of blocks) {
     const parsed = block as RawContentBlock;
     if (parsed.type === 'tool_result' && parsed.tool_use_id) {
-      const tool = toolNameCache.get(parsed.tool_use_id) ?? 'unknown_tool';
+      const tool = toolNameCache.get(parsed.tool_use_id)?.name ?? 'unknown_tool';
       const status = parsed.is_error ? 'error' : 'completed';
       events.push(
         createToolEvent(sessionId, agentId, timestamp, {

@@ -49,6 +49,7 @@ export class AmbientEffects {
   private clockFace: Graphics | null = null;
   private clockHourHand: Graphics | null = null;
   private clockMinuteHand: Graphics | null = null;
+  private lastClockSeconds = -1;
 
   // Coffee steam
   private readonly steamParticles: SteamParticle[] = [];
@@ -168,9 +169,12 @@ export class AmbientEffects {
     if (!this.clockHourHand || !this.clockMinuteHand) return;
 
     const now = new Date();
+    const seconds = now.getSeconds();
+    if (seconds === this.lastClockSeconds) return;
+    this.lastClockSeconds = seconds;
+
     const hours = now.getHours() % 12;
     const minutes = now.getMinutes();
-    const seconds = now.getSeconds();
 
     // Hour hand angle: -PI/2 offset so 12 o'clock is up
     const hourAngle = ((hours + minutes / 60) / 12) * Math.PI * 2 - Math.PI / 2;

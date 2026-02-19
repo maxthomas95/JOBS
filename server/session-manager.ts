@@ -3,6 +3,7 @@ import type { Agent, AgentState } from '../src/types/agent.js';
 import type { MachineInfo, PixelEvent } from '../src/types/events.js';
 import { STATIONS, tileToWorld } from '../src/types/agent.js';
 import { createActivityEvent, createSessionEvent } from './bridge/pixel-events.js';
+import { cleanToolNameCache } from './bridge/claude-adapter.js';
 import type { StatsStore } from './stats-store.js';
 
 const MACHINE_COLORS = ['#4fc3f7', '#81c784', '#ffb74d', '#e57373', '#ba68c8', '#4dd0e1', '#fff176', '#f06292'];
@@ -131,7 +132,7 @@ export class SessionManager {
   private nextNameIndex = 0;
   private readonly assignedNames = new Set<string>();
   private readonly pendingSpawns: PendingSpawn[] = [];
-  private readonly hookPendingChildren = new Map<string, { parentId: string; agentType: string }>();
+  private readonly hookPendingChildren = new Map<string, { parentId: string; agentType: string; timestamp: number }>();
   private readonly spawnWindowMs = 10000;
   private readonly staleIdleMs: number;
   private readonly staleEvictMs: number;
@@ -409,7 +410,7 @@ export class SessionManager {
       const agentId = payload.agent_id as string | undefined;
       const agentType = (payload.agent_type as string) ?? 'subagent';
       if (agentId) {
-        this.hookPendingChildren.set(agentId, { parentId: sessionId, agentType });
+        this.hookPendingChildren.set(agentId, { parentId: sessionId, agentType, timestamp: Date.now() });
       }
       return null;
     }
@@ -686,10 +687,10 @@ export class SessionManager {
 
   private matchPendingSpawn(): PendingSpawn | null {
     const now = Date.now();
-    // Remove stale entries
-    while (this.pendingSpawns.length > 0 && now - this.pendingSpawns[0].timestamp > this.spawnWindowMs) {
-      this.pendingSpawns.shift();
-    }
+    // Remove all stale entries (not just from front)
+    const fresh = this.pendingSpawns.filter(s => now - s.timestamp < this.spawnWindowMs);
+    this.pendingSpawns.length = 0;
+    this.pendingSpawns.push(...fresh);
     // Match the oldest pending spawn
     if (this.pendingSpawns.length > 0) {
       return this.pendingSpawns.shift()!;
@@ -708,8 +709,13 @@ export class SessionManager {
         return candidate;
       }
     }
-    // All names exhausted — generate numbered name
-    const fallback = `Agent-${this.nextNameIndex}`;
+    // All names exhausted — generate numbered name with collision avoidance
+    let fallback = `Agent-${this.nextNameIndex}`;
+    let suffix = 0;
+    while (this.assignedNames.has(fallback)) {
+      suffix++;
+      fallback = `Agent-${this.nextNameIndex}-${suffix}`;
+    }
     this.nextNameIndex += 1;
     this.assignedNames.add(fallback);
     return fallback;
@@ -871,6 +877,16 @@ export class SessionManager {
         }
       }
 
+      // Clean up stale hookPendingChildren entries (older than spawnWindowMs)
+      for (const [key, entry] of this.hookPendingChildren.entries()) {
+        if (now - entry.timestamp > this.spawnWindowMs) {
+          this.hookPendingChildren.delete(key);
+        }
+      }
+
+      // Clean up stale tool name cache entries
+      cleanToolNameCache();
+
       for (const [sessionId, agent] of this.agents.entries()) {
         const age = now - agent.lastEventAt;
         if (age > this.staleEvictMs && agent.state !== 'leaving') {
@@ -882,8 +898,11 @@ export class SessionManager {
           changed = true;
           // Delay removal to allow leaving animation on client
           setTimeout(() => {
-            this.evictSession(sessionId);
-            if (this.onSnapshotNeeded) this.onSnapshotNeeded();
+            const current = this.agents.get(sessionId);
+            if (current && current.state === 'leaving') {
+              this.evictSession(sessionId);
+              if (this.onSnapshotNeeded) this.onSnapshotNeeded();
+            }
           }, 3000);
         } else if (agent.state === 'entering' && now - agent.stateChangedAt > this.enteringTimeoutMs) {
           // 'entering' is a transient state (~2s walk). If stuck longer than 30s,
@@ -893,8 +912,11 @@ export class SessionManager {
           agent.stateChangedAt = now;
           changed = true;
           setTimeout(() => {
-            this.evictSession(sessionId);
-            if (this.onSnapshotNeeded) this.onSnapshotNeeded();
+            const current = this.agents.get(sessionId);
+            if (current && current.state === 'leaving') {
+              this.evictSession(sessionId);
+              if (this.onSnapshotNeeded) this.onSnapshotNeeded();
+            }
           }, 3000);
         } else if (age > this.staleIdleMs && agent.state !== 'idle' && agent.state !== 'leaving') {
           agent.state = 'idle';
@@ -926,8 +948,11 @@ export class SessionManager {
             agent.stateChangedAt = now;
             changed = true;
             setTimeout(() => {
-              this.evictSession(sessionId);
-              if (this.onSnapshotNeeded) this.onSnapshotNeeded();
+              const current = this.agents.get(sessionId);
+              if (current && current.state === 'leaving') {
+                this.evictSession(sessionId);
+                if (this.onSnapshotNeeded) this.onSnapshotNeeded();
+              }
             }, 3000);
           }
           continue;

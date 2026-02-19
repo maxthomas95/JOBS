@@ -108,15 +108,28 @@
 }
 
 .connection-status[data-state='connected'] .status-dot {
-  background: #31e678;
+  background: var(--status-connected, #31e678);
 }
 
 .connection-status[data-state='connecting'] .status-dot {
-  background: #f0cf56;
+  background: var(--status-connecting, #f0cf56);
 }
 
 .connection-status[data-state='disconnected'] .status-dot {
-  background: #ea5e60;
+  background: var(--status-disconnected, #ea5e60);
+}
+
+/* Reconnecting indicator */
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.reconnecting {
+  animation: pulse 1.5s ease-in-out infinite;
+  font-size: 0.55rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 .agent-count {
@@ -138,6 +151,8 @@
   padding: 0.4rem 0.6rem;
   font-size: 0.68rem;
   line-height: 1.5;
+  max-height: 50vh;
+  overflow-y: auto;
 }
 
 .agent-row {
@@ -219,18 +234,25 @@
   max-width: 280px;
 }
 
+/* Feed item entrance animation */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 .feed-item {
-  font-family: monospace;
+  font-family: var(--font-mono, 'IBM Plex Mono', 'Fira Code', monospace);
   font-size: 0.6rem;
   line-height: 1.6;
   opacity: 0.7;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  animation: fadeIn 0.3s ease;
 }
 
 .agent-activity {
-  font-family: monospace;
+  font-family: var(--font-mono, 'IBM Plex Mono', 'Fira Code', monospace);
   font-size: 0.55rem;
   opacity: 0.5;
   white-space: nowrap;
@@ -269,7 +291,7 @@
 }
 
 .project-toggle {
-  font-family: monospace;
+  font-family: var(--font-mono, 'IBM Plex Mono', 'Fira Code', monospace);
   font-size: 0.6rem;
   width: 0.7rem;
   text-align: center;
@@ -300,7 +322,7 @@
 }
 
 .waiting-badge {
-  background: #ffeb3b;
+  background: var(--badge-waiting, #ffeb3b);
   color: #000;
   font-size: 0.55rem;
   font-weight: 600;
@@ -310,7 +332,8 @@
   flex-shrink: 0;
 }
 
-.notification-toggle {
+/* Shared HUD toggle button base */
+.hud-toggle {
   pointer-events: auto;
   font-family: inherit;
   font-size: 0.6rem;
@@ -324,44 +347,24 @@
   cursor: pointer;
 }
 
-.notification-toggle:hover {
+.hud-toggle:hover {
   background: var(--panel-hover, rgba(30, 35, 50, 0.8));
+}
+
+.notification-toggle {
+  pointer-events: auto;
 }
 
 .daynight-toggle {
   pointer-events: auto;
-  font-family: inherit;
-  font-size: 0.6rem;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  background: var(--panel-bg, rgba(10, 12, 18, 0.75));
-  border: 1px solid var(--panel-border, #4a5167);
-  border-radius: 999px;
-  padding: 0.35rem 0.55rem;
-  color: inherit;
-  cursor: pointer;
-}
-
-.daynight-toggle:hover {
-  background: var(--panel-hover, rgba(30, 35, 50, 0.8));
 }
 
 .audio-toggle {
   pointer-events: auto;
-  font-family: inherit;
-  font-size: 0.6rem;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  background: var(--panel-bg, rgba(10, 12, 18, 0.75));
-  border: 1px solid var(--panel-border, #4a5167);
-  border-radius: 999px;
-  padding: 0.35rem 0.55rem;
-  color: inherit;
-  cursor: pointer;
 }
 
-.audio-toggle:hover {
-  background: var(--panel-hover, rgba(30, 35, 50, 0.8));
+.theme-toggle {
+  pointer-events: auto;
 }
 
 .audio-volume {
@@ -407,6 +410,8 @@
   font-size: 0.68rem;
   z-index: 10;
   pointer-events: auto;
+  max-height: calc(100vh - 5rem);
+  overflow-y: auto;
 }
 
 .detail-header {
@@ -466,7 +471,7 @@
 }
 
 .detail-mono {
-  font-family: monospace;
+  font-family: var(--font-mono, 'IBM Plex Mono', 'Fira Code', monospace);
   font-size: 0.6rem;
   opacity: 0.7;
   max-width: 130px;
@@ -535,7 +540,7 @@
 }
 
 .tool-name {
-  font-family: monospace;
+  font-family: var(--font-mono, 'IBM Plex Mono', 'Fira Code', monospace);
   opacity: 0.7;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -566,7 +571,7 @@
 
 .detail-link {
   cursor: pointer;
-  color: #4fc3f7;
+  color: var(--accent-color, #4fc3f7);
 }
 
 .detail-link:hover {
@@ -683,7 +688,7 @@
 }
 
 .stats-tool-name {
-  font-family: monospace;
+  font-family: var(--font-mono, 'IBM Plex Mono', 'Fira Code', monospace);
   opacity: 0.7;
   min-width: 50px;
   overflow: hidden;
@@ -703,7 +708,7 @@
 
 .stats-tool-bar-fill {
   height: 100%;
-  background: #4fc3f7;
+  background: var(--accent-color, #4fc3f7);
   border-radius: 2px;
   transition: width 0.3s ease;
 }
@@ -767,7 +772,7 @@
 }
 
 .supervisor-badge {
-  background: #ffd54f;
+  background: var(--badge-supervisor, #ffd54f);
   color: #000;
   font-size: 0.5rem;
   font-weight: 700;
@@ -778,7 +783,7 @@
 }
 
 .agent-row.supervisor {
-  border-left: 2px solid #ffd54f;
+  border-left: 2px solid var(--badge-supervisor, #ffd54f);
   padding-left: calc(0.4rem - 2px);
 }
 
@@ -793,7 +798,7 @@
 }
 
 .detail-team-lead {
-  color: #ffd54f;
+  color: var(--badge-supervisor, #ffd54f);
   font-weight: 600;
   font-size: 0.6rem;
 }
@@ -842,7 +847,7 @@
 /* Follow mode */
 .follow-indicator {
   position: absolute;
-  bottom: 1.5rem;
+  bottom: 3.5rem;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
@@ -894,7 +899,6 @@
   text-transform: uppercase;
   letter-spacing: 0.03em;
   pointer-events: auto;
-  margin-left: auto;
 }
 
 .agent-row:hover .follow-btn {
@@ -903,19 +907,24 @@
 
 .follow-btn:hover {
   opacity: 1 !important;
-  border-color: #4fc3f7;
-  color: #4fc3f7;
+  border-color: var(--accent-color, #4fc3f7);
+  color: var(--accent-color, #4fc3f7);
 }
 
 .follow-btn.active {
   opacity: 1;
-  border-color: #4fc3f7;
-  color: #4fc3f7;
+  border-color: var(--accent-color, #4fc3f7);
+  color: var(--accent-color, #4fc3f7);
   background: rgba(79, 195, 247, 0.15);
 }
 
 .agent-row.following {
-  border-left: 2px solid #4fc3f7;
+  border-left: 2px solid var(--accent-color, #4fc3f7);
+}
+
+/* Following + supervisor border conflict: gradient shows both states */
+.agent-row.supervisor.following {
+  border-image: linear-gradient(to right, var(--accent-color, #4fc3f7), var(--badge-supervisor, #ffd54f)) 1;
 }
 
 /* Provider badges */
@@ -1003,7 +1012,7 @@
 .group-toggle button.active {
   opacity: 1;
   background: rgba(79, 195, 247, 0.15);
-  border-color: #4fc3f7;
+  border-color: var(--accent-color, #4fc3f7);
 }
 
 .group-toggle button:hover {

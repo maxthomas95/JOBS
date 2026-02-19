@@ -7,9 +7,12 @@ import type { StatsStore } from './stats-store.js';
 export class WSServer {
   private readonly wss: WebSocketServer;
   private statsStore: StatsStore | null = null;
+  private snapshotPending = false;
+  private snapshotTimer: ReturnType<typeof setTimeout> | null = null;
+  private static readonly SNAPSHOT_THROTTLE_MS = 200;
 
   constructor(server: http.Server, private readonly sessionManager: SessionManager, path = process.env.WS_PATH ?? '/ws') {
-    this.wss = new WebSocketServer({ server, path });
+    this.wss = new WebSocketServer({ server, path, maxPayload: 16 * 1024 });
     this.wss.on('connection', (ws) => {
       // eslint-disable-next-line no-console
       console.log(`[ws] client connected (${this.wss.clients.size})`);
@@ -40,6 +43,24 @@ export class WSServer {
   }
 
   broadcastSnapshot(): void {
+    if (this.snapshotTimer) {
+      // Timer already pending — just mark that another snapshot is needed
+      this.snapshotPending = true;
+      return;
+    }
+    // Send immediately
+    this.sendSnapshotToAll();
+    // Set cooldown timer
+    this.snapshotTimer = setTimeout(() => {
+      this.snapshotTimer = null;
+      if (this.snapshotPending) {
+        this.snapshotPending = false;
+        this.sendSnapshotToAll();
+      }
+    }, WSServer.SNAPSHOT_THROTTLE_MS);
+  }
+
+  private sendSnapshotToAll(): void {
     const message: WSMessage = {
       type: 'snapshot',
       agents: this.sessionManager.getSnapshot(),
@@ -74,6 +95,14 @@ export class WSServer {
       machines: this.sessionManager.getMachines(),
     };
     ws.send(JSON.stringify(message));
+  }
+
+  close(): void {
+    if (this.snapshotTimer) {
+      clearTimeout(this.snapshotTimer);
+      this.snapshotTimer = null;
+    }
+    this.wss.close();
   }
 
   private tryParse(raw: string): WSMessage | null {

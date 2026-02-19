@@ -1,31 +1,11 @@
 import { useState } from 'react';
 import { useStatsStore } from '../state/useStatsStore.js';
 import type { AgentState } from '../types/agent.js';
+import { STATE_LABELS, STATE_COLORS } from './stateLabels.js';
 
-const STATE_LABELS: Record<string, string> = {
-  coding: 'Coding',
-  thinking: 'Thinking',
-  terminal: 'Terminal',
-  searching: 'Searching',
-  delegating: 'Delegating',
-  waiting: 'Waiting',
-  error: 'Error',
-  needsApproval: 'Needs Approval',
-  compacting: 'Compacting',
-  cooling: 'Coffee Break',
-};
-
-const LEGEND_ITEMS: Array<{ state: AgentState; color: string }> = [
-  { state: 'coding', color: '#42a5f5' },
-  { state: 'thinking', color: '#7c4dff' },
-  { state: 'terminal', color: '#2ee65e' },
-  { state: 'searching', color: '#ffa726' },
-  { state: 'delegating', color: '#ce93d8' },
-  { state: 'waiting', color: '#ffeb3b' },
-  { state: 'error', color: '#ff4444' },
-  { state: 'needsApproval', color: '#ff9800' },
-  { state: 'compacting', color: '#ab47bc' },
-  { state: 'cooling', color: '#90a4ae' },
+const LEGEND_STATES: AgentState[] = [
+  'coding', 'thinking', 'terminal', 'searching', 'delegating',
+  'waiting', 'error', 'needsApproval', 'compacting', 'cooling',
 ];
 
 export function StatsPanel() {
@@ -98,10 +78,10 @@ export function StatsPanel() {
 
       {showLegend ? (
         <div className="color-legend">
-          {LEGEND_ITEMS.map((item) => (
-            <div key={item.state} className="legend-item">
-              <span className="legend-dot" style={{ background: item.color }} />
-              <span className="legend-label">{STATE_LABELS[item.state]}</span>
+          {LEGEND_STATES.map((state) => (
+            <div key={state} className="legend-item">
+              <span className="legend-dot" style={{ background: STATE_COLORS[state] }} />
+              <span className="legend-label">{STATE_LABELS[state]}</span>
             </div>
           ))}
         </div>

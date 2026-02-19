@@ -1,6 +1,6 @@
 import { basename, join } from 'node:path';
 import { EventEmitter } from 'node:events';
-import { promises as fs } from 'node:fs';
+import { promises as fs, createReadStream } from 'node:fs';
 import chokidar, { type FSWatcher } from 'chokidar';
 import type { WatchLinePayload, WatchSessionPayload } from './types.js';
 
@@ -75,6 +75,11 @@ export class SessionWatcher extends EventEmitter {
     this.watcher.on('change', (path) => {
       void this.processFile(path, false);
     });
+    this.watcher.on('unlink', (path) => {
+      this.fileOffsets.delete(path);
+      const sessionId = basename(path, '.jsonl');
+      this.announcedSessions.delete(sessionId);
+    });
     this.watcher.on('error', (error) => {
       this.emit('error', error);
     });
@@ -120,17 +125,35 @@ export class SessionWatcher extends EventEmitter {
       }
 
       const nextOffset = this.fileOffsets.get(filePath) ?? 0;
-      const buffer = await fs.readFile(filePath);
-      const chunk = buffer.subarray(nextOffset);
-      const chunkText = chunk.toString('utf8');
-      const lines = chunkText.split('\n').filter((line) => line.trim().length > 0);
+      if (stat.size <= nextOffset) return;
+
+      // Read only new bytes from offset using a stream
+      const chunks: Buffer[] = [];
+      await new Promise<void>((resolve, reject) => {
+        const stream = createReadStream(filePath, { start: nextOffset });
+        stream.on('data', (chunk: Buffer | string) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
+        stream.on('end', resolve);
+        stream.on('error', reject);
+      });
+      const newData = Buffer.concat(chunks);
+      const chunkText = newData.toString('utf8');
+
+      // Handle partial lines: only process complete lines (ending with \n)
+      const lastNewline = chunkText.lastIndexOf('\n');
+      if (lastNewline === -1) {
+        // No complete line yet — don't advance offset
+        return;
+      }
+      const completeText = chunkText.slice(0, lastNewline);
+      const lines = completeText.split('\n').filter((line) => line.trim().length > 0);
 
       for (const line of lines) {
         const payload: WatchLinePayload = { line, sessionId, agentId, filePath };
         this.emit('line', payload);
       }
 
-      this.fileOffsets.set(filePath, stat.size);
+      // Advance offset past the processed data (including the trailing \n)
+      this.fileOffsets.set(filePath, nextOffset + lastNewline + 1);
     } catch (error) {
       this.emit('error', error as Error);
     }

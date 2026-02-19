@@ -6,25 +6,9 @@ import { useAudioStore } from '../state/useAudioStore.js';
 import { useDayNightStore } from '../state/useDayNightStore.js';
 import { useThemeStore } from '../state/useThemeStore.js';
 import { groupByMachine } from '../state/useOfficeStore.js';
-import type { Agent, AgentState } from '../types/agent.js';
+import type { Agent } from '../types/agent.js';
 import type { PixelEvent } from '../types/events.js';
-
-const STATE_LABELS: Record<AgentState, string> = {
-  entering: 'Arriving',
-  coding: 'Coding',
-  reading: 'Reading',
-  thinking: 'Thinking',
-  terminal: 'Terminal',
-  searching: 'Searching',
-  cooling: 'Coffee Break',
-  delegating: 'Delegating',
-  error: 'Error',
-  waiting: 'Waiting',
-  needsApproval: 'Needs Approval',
-  compacting: 'Compacting',
-  idle: 'Idle',
-  leaving: 'Leaving',
-};
+import { STATE_LABELS } from './stateLabels.js';
 
 
 function formatUptime(startMs: number, nowMs: number): string {
@@ -160,7 +144,7 @@ export function HUD() {
   const themeLabel = useThemeStore((state) => state.theme.label);
   const cycleTheme = useThemeStore((state) => state.cycleTheme);
   const count = agents.size;
-  const allAgents = Array.from(agents.values()).slice(0, 10);
+  const allAgents = Array.from(agents.values());
   const multiMachine = machines.size > 1;
   const showMachineMode = multiMachine && groupMode === 'machine';
   const projectGroups = showMachineMode ? null : groupByProject(allAgents, agents);
@@ -264,7 +248,7 @@ export function HUD() {
         <h1>J.O.B.S. ONLINE</h1>
         <div className="hud-header-right">
           <button
-            className="audio-toggle"
+            className="hud-toggle audio-toggle"
             onClick={toggleAudio}
             title={audioEnabled ? 'Mute audio' : 'Enable audio'}
           >
@@ -282,21 +266,21 @@ export function HUD() {
             />
           ) : null}
           <button
-            className="daynight-toggle"
+            className="hud-toggle daynight-toggle"
             onClick={toggleDayNight}
             title={dayNightEnabled ? 'Disable day/night cycle' : 'Enable day/night cycle'}
           >
             {dayNightEnabled ? 'D/N ON' : 'D/N OFF'}
           </button>
           <button
-            className="notification-toggle"
+            className="hud-toggle notification-toggle"
             onClick={toggleNotifications}
             title={notificationsEnabled ? 'Disable notifications' : 'Enable notifications'}
           >
             {notificationsEnabled ? 'NOTIF ON' : 'NOTIF OFF'}
           </button>
           <button
-            className="daynight-toggle"
+            className="hud-toggle theme-toggle"
             onClick={cycleTheme}
             title="Cycle theme"
           >

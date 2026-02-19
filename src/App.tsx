@@ -27,6 +27,8 @@ export default function App() {
     '--text': theme.css.text,
     '--text-muted': theme.css.textMuted,
     '--panel-hover': theme.css.panelBgSolid + 'cc',
+    '--accent-color': theme.css.accentColor,
+    '--font-mono': "'IBM Plex Mono', 'Fira Code', monospace",
   } as React.CSSProperties;
 
   return (

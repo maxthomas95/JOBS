@@ -64,6 +64,16 @@ class AudioManager {
     }
     if (!val) {
       this.stopAllLoops();
+      // Unload all Howl instances to free memory
+      for (const howl of this.sounds.values()) {
+        howl.unload();
+      }
+      this.sounds.clear();
+      for (const howl of this.loops.values()) {
+        howl.unload();
+      }
+      this.loops.clear();
+      this.loaded = false;
     }
   }
 

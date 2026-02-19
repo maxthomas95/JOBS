@@ -82,7 +82,7 @@ export class AnimationController {
       return;
     }
     const agents = useOfficeStore.getState().agents;
-    const deltaSeconds = ticker.deltaMS / 1000;
+    const deltaSeconds = Math.min(ticker.deltaMS / 1000, 0.1);
     this.dayNightCycle?.update(deltaSeconds);
     this.ambientEffects?.update(deltaSeconds, agents);
     this.spriteManager.update(deltaSeconds, agents);

@@ -53,6 +53,8 @@ app.use(createHookRouter(sessionManager, wsServer));
 // Mount webhook receiver for external integrations (CI/CD, Codex, monitoring)
 app.use(createWebhookRouter(sessionManager, wsServer));
 
+let watcher: SessionWatcher | null = null;
+
 if (useMock) {
   // eslint-disable-next-line no-console
   console.log(`[mock] using '${mockMode}' mock events`);
@@ -71,7 +73,7 @@ if (useMock) {
     });
   }
 } else {
-  const watcher = new SessionWatcher(claudeDir);
+  watcher = new SessionWatcher(claudeDir);
 
   watcher.on('session', ({ sessionId, filePath, agentId }) => {
     // eslint-disable-next-line no-console
@@ -142,3 +144,19 @@ server.listen(port, () => {
   // eslint-disable-next-line no-console
   console.log(`jobs server listening on http://localhost:${port} (mock=${useMock})`);
 });
+
+function gracefulShutdown() {
+  // eslint-disable-next-line no-console
+  console.log('[JOBS] Shutting down gracefully...');
+  if (watcher) {
+    watcher.stop();
+  }
+  wsServer.close();
+  statsStore.flush();
+  server.close(() => {
+    process.exit(0);
+  });
+}
+
+process.on('SIGTERM', gracefulShutdown);
+process.on('SIGINT', gracefulShutdown);

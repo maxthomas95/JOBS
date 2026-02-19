@@ -11,6 +11,7 @@ export function useWebSocket(url: string): void {
     let reconnectTimer: number | null = null;
     let pingTimer: number | null = null;
     let shouldReconnect = true;
+    let reconnectDelay = 3000;
 
     const connect = () => {
       useConnectionStore.getState().setStatus('connecting');
@@ -18,6 +19,7 @@ export function useWebSocket(url: string): void {
 
       ws.onopen = () => {
         useConnectionStore.getState().setStatus('connected');
+        reconnectDelay = 3000;
         pingTimer = window.setInterval(() => {
           if (ws?.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ type: 'ping' }));
@@ -48,12 +50,14 @@ export function useWebSocket(url: string): void {
 
       ws.onclose = () => {
         useConnectionStore.getState().setStatus('disconnected');
+        useOfficeStore.getState().clearAgents();
         if (pingTimer !== null) {
           window.clearInterval(pingTimer);
           pingTimer = null;
         }
         if (shouldReconnect) {
-          reconnectTimer = window.setTimeout(connect, 3000);
+          reconnectTimer = window.setTimeout(connect, reconnectDelay);
+          reconnectDelay = Math.min(reconnectDelay * 2, 60000);
         }
       };
 
