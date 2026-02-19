@@ -90,9 +90,9 @@ if (useMock) {
   watcher.on('line', ({ line, sessionId, agentId, filePath }) => {
     // Re-register if session was evicted but file is still active
     if (!sessionManager.hasSession(sessionId)) {
+      const restored = sessionManager.registerSession(sessionId, filePath);
       // eslint-disable-next-line no-console
-      console.log(`[watcher] re-registering evicted session ${sessionId}`);
-      sessionManager.registerSession(sessionId, filePath);
+      console.log(`[watcher] re-registering evicted session ${sessionId} (as "${restored.name}")`);
       const restarted = createSessionEvent(sessionId, 'started', {
         agentId,
         project: filePath,

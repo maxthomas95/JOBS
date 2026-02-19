@@ -98,6 +98,22 @@ function classifyTool(toolName: string): ToolClassification {
   return 'coding';
 }
 
+/** Remembered identity of an evicted agent, for resurrection if the same session resumes */
+interface ArchivedAgent {
+  name: string;
+  characterIndex: number;
+  deskIndex: number | null;
+  parentId: string | null;
+  childIds: string[];
+  project: string | null;
+  filePath?: string;
+  roleName: string | null;
+  provider: string;
+  machineId: string | null;
+  machineName: string | null;
+  archivedAt: number;
+}
+
 /** Tracks an agent that recently used the Task tool and may spawn a child */
 interface PendingSpawn {
   parentId: string;
@@ -108,6 +124,8 @@ interface PendingSpawn {
 
 export class SessionManager {
   private readonly agents = new Map<string, ServerAgent>();
+  private readonly archivedAgents = new Map<string, ArchivedAgent>();
+  private readonly archiveTtlMs = 2 * 60 * 60 * 1000; // 2 hours
   private readonly deskAssignments: Array<string | null>;
   private nextCharacterIndex = 0;
   private nextNameIndex = 0;
@@ -163,6 +181,13 @@ export class SessionManager {
       existing.lastEventAt = Date.now();
       existing.filePath = filePath;
       return existing;
+    }
+
+    // Check archive — restore identity if same session is resuming
+    const archived = this.archivedAgents.get(sessionId);
+    if (archived) {
+      this.archivedAgents.delete(sessionId);
+      return this.restoreFromArchive(sessionId, filePath, archived);
     }
 
     const door = tileToWorld(STATIONS.door);
@@ -281,6 +306,15 @@ export class SessionManager {
           this.onSnapshotNeeded();
         }
       } else if (event.action === 'ended') {
+        // True session end — clear any archive so it won't resurrect
+        const wasArchived = this.archivedAgents.get(sessionId);
+        if (wasArchived) {
+          this.archivedAgents.delete(sessionId);
+          // Name was held by archive — release it now
+          if (wasArchived.name) {
+            this.assignedNames.delete(wasArchived.name);
+          }
+        }
         this.statsStore?.recordSessionEnd(sessionId, {});
         this.applyState(agent, 'leaving', STATIONS.door, null);
         this.releaseDesk(sessionId);
@@ -473,6 +507,19 @@ export class SessionManager {
       if (agent.name) {
         this.assignedNames.delete(agent.name);
       }
+      if (agent.machineId) {
+        this.updateMachineCount(agent.machineId, -1);
+      }
+    }
+    this.releaseDesk(sessionId);
+    this.agents.delete(sessionId);
+  }
+
+  /** Remove an agent after stale eviction — name stays reserved via the archive */
+  private evictSession(sessionId: string): void {
+    const agent = this.agents.get(sessionId);
+    if (agent) {
+      // Don't release the name — it's held by the archive entry
       if (agent.machineId) {
         this.updateMachineCount(agent.machineId, -1);
       }
@@ -724,21 +771,116 @@ export class SessionManager {
     }
   }
 
+  /** Save an evicted agent's identity so it can be restored if the session resumes */
+  private archiveAgent(sessionId: string, agent: ServerAgent): void {
+    this.archivedAgents.set(sessionId, {
+      name: agent.name ?? '',
+      characterIndex: agent.characterIndex,
+      deskIndex: agent.deskIndex,
+      parentId: agent.parentId,
+      childIds: [...agent.childIds],
+      project: agent.project,
+      filePath: agent.filePath,
+      roleName: agent.roleName,
+      provider: agent.provider,
+      machineId: agent.machineId,
+      machineName: agent.machineName,
+      archivedAt: Date.now(),
+    });
+    // Keep the name reserved so nobody else takes it
+    // (assignedNames.delete is NOT called here — only on true session end)
+  }
+
+  /** Restore an archived agent with its original identity */
+  private restoreFromArchive(sessionId: string, filePath: string, archived: ArchivedAgent): ServerAgent {
+    const door = tileToWorld(STATIONS.door);
+
+    // Try to reclaim the same desk, fall back to normal assignment
+    let deskIndex: number | null = null;
+    if (archived.deskIndex !== null && this.deskAssignments[archived.deskIndex] === null) {
+      this.deskAssignments[archived.deskIndex] = sessionId;
+      deskIndex = archived.deskIndex;
+    } else {
+      deskIndex = this.reserveDesk(sessionId, null);
+    }
+
+    const target = deskIndex === null ? door : tileToWorld(STATIONS.desks[deskIndex]);
+
+    // Filter childIds to only still-active agents
+    const childIds = archived.childIds.filter((cid) => this.agents.has(cid));
+
+    const agent: ServerAgent = {
+      id: sessionId,
+      sessionId,
+      characterIndex: archived.characterIndex,
+      state: 'entering',
+      position: door,
+      targetPosition: target,
+      deskIndex,
+      lastEventAt: Date.now(),
+      stateChangedAt: Date.now(),
+      activityText: null,
+      name: archived.name,
+      roleName: archived.roleName,
+      project: archived.project ?? extractProjectName(filePath),
+      waitingForHuman: false,
+      parentId: archived.parentId,
+      childIds,
+      provider: archived.provider,
+      machineId: archived.machineId ?? this.localMachineId,
+      machineName: archived.machineName ?? this.localMachineName,
+      sourceType: null,
+      sourceName: null,
+      sourceUrl: null,
+      filePath,
+    };
+
+    this.updateMachineCount(agent.machineId ?? this.localMachineId, 1);
+
+    // Re-link parent to child
+    if (archived.parentId) {
+      const parent = this.agents.get(archived.parentId);
+      if (parent && !parent.childIds.includes(sessionId)) {
+        parent.childIds = [...parent.childIds, sessionId];
+      }
+    }
+
+    // Don't increment nextCharacterIndex — reusing archived value
+    this.agents.set(sessionId, agent);
+    // Don't call statsStore.recordSessionStart — the old stats record is still open
+    // eslint-disable-next-line no-console
+    console.log(`[session-manager] restored archived agent ${sessionId} as "${archived.name}"`);
+    return agent;
+  }
 
   private startGhostTimer(): void {
     setInterval(() => {
       const now = Date.now();
       let changed = false;
+
+      // Clean up expired archive entries
+      for (const [sid, arch] of this.archivedAgents.entries()) {
+        if (now - arch.archivedAt > this.archiveTtlMs) {
+          this.archivedAgents.delete(sid);
+          // Release the held name now that the archive has expired
+          if (arch.name) {
+            this.assignedNames.delete(arch.name);
+          }
+        }
+      }
+
       for (const [sessionId, agent] of this.agents.entries()) {
         const age = now - agent.lastEventAt;
         if (age > this.staleEvictMs && agent.state !== 'leaving') {
+          // Archive before eviction so the agent can be restored
+          this.archiveAgent(sessionId, agent);
           agent.state = 'leaving';
           agent.targetPosition = tileToWorld(STATIONS.door);
           agent.stateChangedAt = now;
           changed = true;
           // Delay removal to allow leaving animation on client
           setTimeout(() => {
-            this.removeSession(sessionId);
+            this.evictSession(sessionId);
             if (this.onSnapshotNeeded) this.onSnapshotNeeded();
           }, 3000);
         } else if (agent.state === 'entering' && now - agent.stateChangedAt > this.enteringTimeoutMs) {
@@ -749,7 +891,7 @@ export class SessionManager {
           agent.stateChangedAt = now;
           changed = true;
           setTimeout(() => {
-            this.removeSession(sessionId);
+            this.evictSession(sessionId);
             if (this.onSnapshotNeeded) this.onSnapshotNeeded();
           }, 3000);
         } else if (age > this.staleIdleMs && agent.state !== 'idle' && agent.state !== 'leaving') {
@@ -775,12 +917,14 @@ export class SessionManager {
         if (agent.waitingForHuman && agent.waitingSince) {
           const waitingAge = now - agent.waitingSince;
           if (waitingAge > this.waitingEvictMs) {
+            // Archive before eviction so the agent can be restored
+            this.archiveAgent(sessionId, agent);
             agent.state = 'leaving';
             agent.targetPosition = tileToWorld(STATIONS.door);
             agent.stateChangedAt = now;
             changed = true;
             setTimeout(() => {
-              this.removeSession(sessionId);
+              this.evictSession(sessionId);
               if (this.onSnapshotNeeded) this.onSnapshotNeeded();
             }, 3000);
           }

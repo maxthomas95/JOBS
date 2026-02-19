@@ -256,9 +256,11 @@ export const useOfficeStore = create<OfficeState>()(
             });
           }
         }
-        // Initialize history for new agent
+        // Append to history (preserves previous entries if agent is resuming)
         const nextHistory = new Map(state.agentHistory);
-        nextHistory.set(event.sessionId, [{ state: 'entering', timestamp: event.timestamp }]);
+        const existingHistory = nextHistory.get(event.sessionId) ?? [];
+        existingHistory.push({ state: 'entering', timestamp: event.timestamp });
+        nextHistory.set(event.sessionId, existingHistory);
         set({ agentHistory: nextHistory });
         return;
       }
