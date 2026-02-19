@@ -687,7 +687,13 @@ export class SessionManager {
 
   private applyWebhookState(agent: ServerAgent, webhookState: string): void {
     const mapping = WEBHOOK_STATE_MAP[webhookState];
-    if (!mapping) return;
+    if (!mapping) {
+      // eslint-disable-next-line no-console
+      console.warn(`[webhook] Unknown state "${webhookState}" for ${agent.id} — defaulting to "coding" at desk`);
+      const desk = agent.deskIndex === null ? STATIONS.whiteboard : STATIONS.desks[agent.deskIndex];
+      this.applyState(agent, 'coding', desk, agent.activityText);
+      return;
+    }
 
     const desk = agent.deskIndex === null ? STATIONS.whiteboard : STATIONS.desks[agent.deskIndex];
     const station = mapping.station === 'desk' ? desk : STATIONS[mapping.station as keyof typeof STATIONS] as { x: number; y: number };
