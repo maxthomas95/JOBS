@@ -943,6 +943,19 @@ export class SessionManager {
         // This avoids false positives because tool_use and thinking events set different lastEventType values.
         const isTextResponse = agent.lastEventType === 'activity.responding';
         if (isTextResponse && elapsed > this.waitingThresholdMs) {
+          // Sub-agents don't interact with humans — they're done, so leave immediately
+          if (agent.parentId) {
+            this.archiveAgent(sessionId, agent);
+            agent.state = 'leaving';
+            agent.targetPosition = tileToWorld(STATIONS.door);
+            agent.stateChangedAt = now;
+            changed = true;
+            setTimeout(() => {
+              this.evictSession(sessionId);
+              if (this.onSnapshotNeeded) this.onSnapshotNeeded();
+            }, 3000);
+            continue;
+          }
           agent.waitingForHuman = true;
           agent.waitingSince = now;
           this.applyState(agent, 'waiting', STATIONS.coffee, 'Waiting...');
