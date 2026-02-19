@@ -93,10 +93,16 @@ function groupByProject(agents: Agent[], agentMap: Map<string, Agent>): Map<stri
       if (isSupervisor(agent, agentMap)) {
         supervisors.push(agent);
       } else if (agent.parentId && agentMap.has(agent.parentId)) {
-        // Active child — will be nested under parent
-        const siblings = childrenByParent.get(agent.parentId) ?? [];
-        siblings.push(agent);
-        childrenByParent.set(agent.parentId, siblings);
+        // Only nest under parent if parent is in the SAME project group;
+        // otherwise the child vanishes (parent isn't iterated in this group).
+        const parent = agentMap.get(agent.parentId)!;
+        if ((parent.project || 'Unknown') === key) {
+          const siblings = childrenByParent.get(agent.parentId) ?? [];
+          siblings.push(agent);
+          childrenByParent.set(agent.parentId, siblings);
+        } else {
+          standalone.push(agent);
+        }
       } else {
         standalone.push(agent);
       }

@@ -1,4 +1,5 @@
 import { hostname } from 'node:os';
+import { existsSync } from 'node:fs';
 import type { Agent, AgentState } from '../src/types/agent.js';
 import type { MachineInfo, PixelEvent } from '../src/types/events.js';
 import { STATIONS, tileToWorld } from '../src/types/agent.js';
@@ -40,21 +41,47 @@ const AGENT_NAMES = [
 
 /** Extract project name from Claude's session file path.
  *  Path format: ~/.claude/projects/{encoded-path}/{uuid}.jsonl
- *  The encoded-path is URL-encoded and contains the project directory.
- *  We decode it and return the last segment as the project name. */
+ *  The encoded-path may be URL-encoded (older) or dash-encoded (current):
+ *    URL: C%3A%5Crepo%5Cjobs  →  decoded C:\repo\jobs  →  "jobs"
+ *    Dash: C--repo-jobs        →  resolve via filesystem  →  "jobs" */
 function extractProjectName(filePath: string): string | null {
-  // Normalize to forward slashes
   const normalized = filePath.replace(/\\/g, '/');
-  // Match .claude/projects/{encoded-path}/{uuid}.jsonl
-  const match = normalized.match(/\.claude\/projects\/([^/]+)\//);
+  const match = normalized.match(/\.claude\/projects\/([^/]+)/);
   if (match) {
+    const segment = match[1];
+
+    // 1. Try URL decoding (older Claude versions or other platforms)
     try {
-      const decoded = decodeURIComponent(match[1]);
-      // decoded is an absolute path like /home/user/my-project or C:\repo\jobs
-      const segments = decoded.replace(/\\/g, '/').split('/').filter(Boolean);
-      return segments[segments.length - 1] || null;
+      const decoded = decodeURIComponent(segment);
+      if (decoded !== segment) {
+        const segments = decoded.replace(/\\/g, '/').split('/').filter(Boolean);
+        return segments[segments.length - 1] || null;
+      }
     } catch {
-      // Fallback if decoding fails
+      // Not URL-encoded — fall through
+    }
+
+    // 2. Claude's dash-encoding: path separators (: \ /) replaced with -
+    //    Windows: C:\repo\jobs → C--repo-jobs
+    //    Unix: /home/user/project → -home-user-project
+    //    Try each dash (right-to-left) as the project-name boundary,
+    //    reconstruct the parent path, and check if it exists on disk.
+    const winDrive = segment.match(/^([A-Za-z])--(.+)$/);
+    const rest = winDrive ? winDrive[2] : segment.startsWith('-') ? segment.slice(1) : null;
+    const prefix = winDrive ? `${winDrive[1]}:/` : segment.startsWith('-') ? '/' : null;
+
+    if (prefix && rest) {
+      for (let i = rest.length - 1; i >= 0; i--) {
+        if (rest[i] !== '-') continue;
+        const parentPart = rest.slice(0, i).replace(/-/g, '/');
+        try {
+          if (existsSync(prefix + parentPart)) {
+            return rest.slice(i + 1);
+          }
+        } catch { /* permission error — skip */ }
+      }
+      // No dash resolved — project is directly under drive/root
+      return rest;
     }
   }
   // Fallback: use basename of the path minus extension
@@ -453,6 +480,12 @@ export class SessionManager {
       // Prefer cwd (human-readable dir name, already basename'd by hook-receiver)
       // over project (often undefined from hooks, causing UUID fallback)
       const project = (payload.cwd as string) || (payload.project as string) || undefined;
+      // If agent already registered (by watcher), update project from hook's cwd
+      // since hooks provide the authoritative human-readable project name
+      const existing = this.agents.get(sessionId);
+      if (existing && project) {
+        existing.project = project;
+      }
       const event = createSessionEvent(sessionId, 'started', {
         agentId: sessionId,
         project,
