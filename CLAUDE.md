@@ -24,6 +24,9 @@ The system has two main parts connected by WebSocket:
 - `bridge/` — Core modules extracted from pixelhq-bridge (MIT): watcher, parser, claude-adapter, events, types
 - `session-manager.ts` — Discovers active sessions, assigns agent IDs, tracks agent lifecycle state machine
 - `ws-server.ts` — WebSocket broadcast to all connected browsers
+- `hook-receiver.ts` — POST /api/hooks endpoint for Claude Code hooks
+- `webhook-receiver.ts` — POST /api/webhooks endpoint for external sources (CI, Codex, etc.)
+- `stats-store.ts` — Persistent session statistics (JSON file, survives restarts)
 
 **Client (`src/`)** — React app with PixiJS canvas overlay:
 - `engine/` — PixiJS rendering: tilemap (20x15 grid, 16px tiles), agent sprites, A* pathfinding, animation controller, station manager, ambient effects
@@ -39,13 +42,13 @@ The system has two main parts connected by WebSocket:
 
 ## Project Status
 
-Milestones v1 (M1-M5) and v2 (M1-M5) are complete. Currently in v2-M6 planning (Dashboard & Integrations). See VISION.md for the full roadmap.
+Milestones v1 (M1-M5) and v2 (M1-M6) are complete. Currently in v2-M7 (Stabilization & Polish). See VISION.md for the full roadmap.
 
 ## Key Design Decisions
 
 - **Privacy first:** The claude-adapter must strip all sensitive content (code, full file paths, bash commands, thinking/responses) before broadcasting
 - **Bridge extraction:** Core file-watching modules come from pixelhq-bridge (MIT) — extract only watcher, parser, adapter, events (~4 files), skip iOS-specific code
 - **Single container:** Both static frontend and WebSocket server run in one Docker container
-- **Sprites:** v1 uses a16z/ai-town MIT sprites (8 characters with walk cycles), planned upgrade to LimeZu + PixelLab.ai
-- **Desk assignment:** First-come-first-served (FIFO), 10 desks available
+- **Sprites:** Clawdachi GIF blob via @pixi/gif (clone-per-agent), with 32x32folk.png fallback
+- **Desk assignment:** First-come-first-served (FIFO), dynamic count from map config (16 main + 1 supervisor with Tiled map)
 - **No socket.io:** Uses native WebSocket client + ws server to avoid overhead

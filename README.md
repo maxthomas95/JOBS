@@ -6,6 +6,23 @@ Multiple simultaneous sessions = a bustling office.
 
 Part of the [Jarvis](https://github.com/maxthomas) AI assistant ecosystem.
 
+## Features
+
+- **Live agent visualization** — sprites walk between office stations based on real Claude Code activity
+- **Speech bubbles** — thought clouds, tool indicators, and file names above each agent
+- **Supervisor mode** — parent agents patrol sub-agent desks, delegate work, and check in
+- **Agent detail panel** — click any agent for a dossier: project, tools used, state timeline, team relationships
+- **Follow mode** — zoom in and track a single agent with smooth camera following
+- **Day/night cycle** — office lighting shifts based on real time of day
+- **Themes** — dark (default), bright, cyberpunk (neon glow), retro (CRT scanlines)
+- **Tiled map support** — renders Tiled Map Editor `.tmj` files directly, with procedural fallback
+- **Ambient audio** — keyboard clacking, coffee brewing, office hum, retro chimes (14 real .ogg samples)
+- **Stats dashboard** — sessions today, total hours, files touched, tools used breakdown
+- **Webhook adapter** — accept events from any source (CI, deploy, monitoring) via HTTP POST
+- **Multi-instance** — watch multiple machines' Claude dirs, with machine grouping in the HUD
+- **OpenAI Codex support** — visualize Codex CLI sessions alongside Claude Code
+- **Privacy first** — no code, file contents, or full paths ever leave the server
+
 ## How It Works
 
 J.O.B.S. has two data paths — both work independently, and they're better together.
@@ -36,8 +53,6 @@ Claude Code's [hooks system](https://docs.anthropic.com/en/docs/claude-code/hook
 
 All hooks run as `async: true` so they never slow down Claude's work. See [Enhanced Mode Setup](#enhanced-mode-setup) below.
 
-**Privacy first:** No code, file contents, or full paths ever leave the server. Both paths strip sensitive data — the JSONL adapter allowlists safe metadata, and the hook script forwards only event metadata.
-
 ## Quick Start
 
 ### Docker (recommended)
@@ -64,6 +79,8 @@ To see activity without real Claude Code sessions:
 MOCK_EVENTS=true npm run dev:server
 ```
 
+Use `MOCK_EVENTS=supervisor` to test team/supervisor scenarios.
+
 ### Production Build
 
 ```bash
@@ -73,11 +90,20 @@ npm start
 
 ## Configuration
 
+All variables are optional. Copy `.env.example` to `.env` to customize.
+
 | Variable | Default | Description |
 |---|---|---|
 | `PORT` | `8780` | Server port |
 | `CLAUDE_DIR` | `~/.claude` | Path to Claude Code data directory |
-| `MOCK_EVENTS` | `false` | Generate fake events for testing |
+| `WS_PATH` | `/ws` | WebSocket endpoint path |
+| `MOCK_EVENTS` | `false` | Generate fake events (`true`, `supervisor`) |
+| `STALE_IDLE_MS` | `300000` | Mark agent idle after this silence (ms) |
+| `STALE_EVICT_MS` | `900000` | Remove stale agent after this silence (ms) |
+| `MACHINE_ID` | _(auto)_ | Unique ID for this machine (multi-instance) |
+| `MACHINE_NAME` | _(hostname)_ | Display name for this machine in the HUD |
+| `WEBHOOK_TOKEN` | _(none)_ | If set, `POST /api/webhooks` requires Bearer auth |
+| `JOBS_URL` | `http://localhost:8780` | JOBS server URL (used by remote hook scripts) |
 
 ## Enhanced Mode Setup
 
@@ -90,6 +116,12 @@ node server/setup-hooks.js
 ```
 
 This adds async hooks to your `~/.claude/settings.json` that POST event metadata to the JOBS server. No sensitive data is sent.
+
+For Codex support:
+
+```bash
+node server/setup-hooks.js --codex
+```
 
 **Manual setup:** Add to `~/.claude/settings.json`:
 
@@ -112,6 +144,18 @@ This adds async hooks to your `~/.claude/settings.json` that POST event metadata
 | Parent-child linking uses 10s timing window | Deterministic via `SubagentStart` |
 | Permission prompts invisible | "Needs Approval" agent state |
 | Context compaction invisible | "Compacting..." agent state |
+
+## Webhooks
+
+Any external system can send events to JOBS via `POST /api/webhooks`:
+
+```bash
+curl -X POST http://localhost:8780/api/webhooks \
+  -H "Content-Type: application/json" \
+  -d '{"source_id": "ci-main", "event": "build", "state": "running", "activity": "Running tests"}'
+```
+
+Webhook agents appear as full office citizens with desks, pathfinding, and bubbles. If `WEBHOOK_TOKEN` is set, include `Authorization: Bearer <token>` or a `token` field in the body.
 
 ## Event-to-Behavior Mapping
 
@@ -136,33 +180,69 @@ This adds async hooks to your `~/.claude/settings.json` that POST event metadata
 - **Build:** Vite 6
 - **File Watching:** chokidar 5
 - **Pathfinding:** pathfinding (A* grid)
+- **Audio:** Howler.js 2.2
 - **Deployment:** Docker, single container, port 8780
 
 ## Project Structure
 
 ```
-server/               Node.js backend
-  bridge/             Extracted from pixelhq-bridge (MIT)
-    watcher.ts        chokidar file watcher
-    parser.ts         JSONL line parser
-    claude-adapter.ts Privacy-stripping adapter
-    pixel-events.ts   Event factories
-    types.ts          Shared bridge types
-  session-manager.ts  Agent lifecycle + desk assignment
-  ws-server.ts        WebSocket broadcast
-  mock-events.ts      Fake event generator for testing
+server/                 Node.js backend
+  bridge/               Extracted from pixelhq-bridge (MIT)
+    watcher.ts          chokidar file watcher
+    parser.ts           JSONL line parser
+    claude-adapter.ts   Privacy-stripping adapter
+    pixel-events.ts     Event factories
+    types.ts            Shared bridge types
+  session-manager.ts    Agent lifecycle + desk assignment
+  ws-server.ts          WebSocket broadcast
+  hook-receiver.ts      POST /api/hooks endpoint
+  webhook-receiver.ts   POST /api/webhooks endpoint
+  stats-store.ts        Persistent session statistics
+  mock-events.ts        Fake event generator for testing
+  setup-hooks.js        One-command hooks + Codex setup
+  hooks/                Hook notify scripts
+    jobs-notify.sh      Shell script for Claude Code hooks
+    jobs-notify.js      Node.js alternative
+    codex-notify.js     OpenAI Codex notify hook
 
-src/                  React frontend
-  engine/             PixiJS rendering
-    PixelOffice.tsx   Canvas setup
-    TileMap.ts        Office layout (20x15 grid)
-    AgentSprite.ts    Character sprites + animation
-    Pathfinder.ts     A* grid pathfinding
-    AnimationController.ts  State → sprite bridge
-  state/              Zustand stores
-  ui/                 React HUD overlay
-  types/              Shared TypeScript types
-  assets/sprites/     ai-town character spritesheets
+src/                    React frontend
+  engine/               PixiJS rendering
+    PixelOffice.tsx     Canvas setup + station config
+    AgentSprite.ts      Character sprites + supervisor behavior
+    Pathfinder.ts       A* grid pathfinding
+    AnimationController.ts  State → animation mapping
+    AmbientEffects.ts   Desk glow, wall clock, coffee steam
+    DayNightCycle.ts    Time-of-day lighting
+    FollowMode.ts       Single-agent camera tracking
+    tileset/            Tilemap rendering (6 files)
+      TiledMapRenderer.ts   Renders Tiled .tmj maps directly
+      ImageTilesetRenderer.ts   LimeZu sprite sheet renderer
+      ProceduralTilesetRenderer.ts  Code-drawn fallback
+      MapConfig.ts      JSON map configuration
+  state/                Zustand stores
+    useOfficeStore.ts   Agents, stations, follow mode
+    useEventStore.ts    Activity feed / event log
+    useAudioStore.ts    Audio preferences + playback
+    useConnectionStore.ts  WebSocket connection state
+    useDayNightStore.ts Day/night cycle state
+    useThemeStore.ts    Theme selection
+    useStatsStore.ts    Session statistics
+  hooks/
+    useWebSocket.ts     WebSocket connection hook
+  ui/                   React HUD overlay
+    HUD.tsx             Header, roster, feed, controls
+    BubbleOverlay.tsx   Speech/thought bubbles above sprites
+    AgentDetailPanel.tsx  Agent dossier (click to inspect)
+    StatsPanel.tsx      Session statistics dashboard
+    ConnectionStatus.tsx  WebSocket health indicator
+  audio/                Sound management
+    AudioManager.ts     Howler.js wrapper
+    sounds.ts           Sound registry + volume config
+  themes.ts             Theme definitions (dark, bright, cyberpunk, retro)
+  types/                Shared TypeScript types
+  assets/
+    sprites/            Clawdachi GIF + character data
+    audio/              14 .ogg samples (CC0)
 ```
 
 ## License
