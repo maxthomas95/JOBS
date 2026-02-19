@@ -86,7 +86,7 @@ function classifyTool(toolName: string): ToolClassification {
   if (tool.includes('read')) {
     return 'reading';
   }
-  if (tool.includes('task')) {
+  if (tool === 'task') {
     return 'delegating';
   }
   if (tool.includes('plan') || tool.includes('enterplanmode')) {
@@ -421,6 +421,8 @@ export class SessionManager {
         this.handleEvent(event);
         return event;
       }
+      // eslint-disable-next-line no-console
+      if (agentId) console.log(`[hooks] SubagentStop: agent_id ${agentId.slice(0, 12)}… not found in active agents`);
       return null;
     }
 
@@ -943,17 +945,9 @@ export class SessionManager {
         // This avoids false positives because tool_use and thinking events set different lastEventType values.
         const isTextResponse = agent.lastEventType === 'activity.responding';
         if (isTextResponse && elapsed > this.waitingThresholdMs) {
-          // Sub-agents don't interact with humans — they're done, so leave immediately
+          // Sub-agents go idle between team turns — don't treat silence as "done".
+          // They'll leave properly via session.ended or the normal stale eviction path.
           if (agent.parentId) {
-            this.archiveAgent(sessionId, agent);
-            agent.state = 'leaving';
-            agent.targetPosition = tileToWorld(STATIONS.door);
-            agent.stateChangedAt = now;
-            changed = true;
-            setTimeout(() => {
-              this.evictSession(sessionId);
-              if (this.onSnapshotNeeded) this.onSnapshotNeeded();
-            }, 3000);
             continue;
           }
           agent.waitingForHuman = true;
