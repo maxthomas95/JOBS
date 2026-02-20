@@ -780,7 +780,7 @@ export class AgentSpriteManager {
       }
       // Position above head with gentle bob
       visual.crown.x = sprite.x;
-      visual.crown.y = sprite.y - sprite.height * 0.4 + Math.sin(visual.phase * 2) * 0.5;
+      visual.crown.y = sprite.y - sprite.height * 0.55 + Math.sin(visual.phase * 2) * 0.5;
     } else {
       // Hide crown
       if (visual.crown) {
