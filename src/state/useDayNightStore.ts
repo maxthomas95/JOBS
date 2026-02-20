@@ -17,14 +17,14 @@ function loadPersistedState(): { enabled: boolean } {
         enabled: typeof parsed.enabled === 'boolean' ? parsed.enabled : true,
       };
     }
-  } catch {}
+  } catch { /* ignore localStorage errors */ }
   return { enabled: true };
 }
 
 function persist(enabled: boolean): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ enabled }));
-  } catch {}
+  } catch { /* ignore localStorage errors */ }
 }
 
 const initial = loadPersistedState();

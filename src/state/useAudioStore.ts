@@ -22,14 +22,14 @@ function loadPersistedState(): { enabled: boolean; volume: number } {
         volume: typeof parsed.volume === 'number' ? parsed.volume : 50,
       };
     }
-  } catch {}
+  } catch { /* ignore localStorage errors */ }
   return { enabled: false, volume: 50 };
 }
 
 function persist(enabled: boolean, volume: number): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ enabled, volume }));
-  } catch {}
+  } catch { /* ignore localStorage errors */ }
 }
 
 const initial = loadPersistedState();

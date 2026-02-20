@@ -159,7 +159,7 @@ export function HUD() {
   const multipleGroups = activeGroups.size > 1;
   const recentEvents = events.slice(0, 5);
 
-  const [now, setNow] = useState(Date.now());
+  const [now, setNow] = useState(() => Date.now());
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set());
   useEffect(() => {
     const id = window.setInterval(() => setNow(Date.now()), 1000);

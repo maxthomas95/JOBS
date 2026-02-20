@@ -1,7 +1,26 @@
 {
   "name": "jobs",
-  "private": true,
   "version": "0.1.0",
+  "description": "Self-hosted pixel-art office that visualizes Claude Code agent activity in real-time",
+  "author": "Max Thomas",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/maxthomas95/JOBS.git"
+  },
+  "homepage": "https://github.com/maxthomas95/JOBS",
+  "bugs": {
+    "url": "https://github.com/maxthomas95/JOBS/issues"
+  },
+  "keywords": [
+    "claude-code",
+    "pixel-art",
+    "visualization",
+    "agent",
+    "pixi",
+    "office",
+    "developer-tools"
+  ],
   "type": "module",
   "scripts": {
     "dev:client": "vite --port 5173",

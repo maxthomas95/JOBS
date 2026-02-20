@@ -649,11 +649,11 @@ open http://your-proxmox-host:8780
   - Patterned floor tiles, desk details (monitors, keyboards, mugs), wall textures
   - Bookshelf spines, coffee machine detail, terminal screen glow
   - All drawn via PixiJS Graphics — zero external image assets, zero licensing concerns
-- [ ] **Tileset abstraction layer** — same JSON map config renders with either backend
+- [x] **Tileset abstraction layer** — same JSON map config renders with either backend
   - Programmatic renderer: built-in, ships with repo (default)
   - Image renderer: loads LimeZu (or any compatible) sprite sheet when present in `src/assets/tiles/`
   - Auto-detect: if tileset images exist use them, otherwise fall back to programmatic
-- [ ] **LimeZu as optional premium skin** — documented upgrade path
+- [x] **LimeZu as optional premium skin** — documented upgrade path
   - README instructions: "Buy LimeZu Modern Office ($2.50), drop into `src/assets/tiles/`"
   - Tileset never committed to repo — `.gitignore` entry for image tilesets
   - JSON map config is identical for both renderers
@@ -662,24 +662,24 @@ open http://your-proxmox-host:8780
 ### GitHub Publishing — "Open the doors"
 > Everything needed to make J.O.B.S. a proper open-source project that anyone can clone and run.
 
-- [ ] **LICENSE file** — MIT (matches all dependencies and extracted code)
-- [ ] **Asset audit** — verify all bundled assets are redistributable
+- [x] **LICENSE file** — MIT (matches all dependencies and extracted code)
+- [x] **Asset audit** — verify all bundled assets are redistributable
   - Audio: CC0 from freesound.org (safe)
   - Claude GIF sprite: MIT from Clawdachi (safe)
   - Tileset: programmatic default only (safe), LimeZu excluded via .gitignore
-- [ ] **README for external users** — setup, config, architecture overview
+- [x] **README for external users** — setup, config, architecture overview
   - Clear "Quick Start" section: clone, install, `docker compose up`
   - Document environment variables and optional config
   - "Optional: Premium Tileset" section with LimeZu instructions
-- [ ] **Strip machine-specific config** — ensure no hardcoded paths or personal details
+- [x] **Strip machine-specific config** — ensure no hardcoded paths or personal details
   - All paths use environment variables (`CLAUDE_DIR`, `PORT`)
   - No references to personal Proxmox setup in committed config
-- [ ] **Contributing guide** — basic PR/issue guidelines
-- [ ] **Screenshots / GIF demo** — visual proof the app works and looks great
+- [x] **Contributing guide** — basic PR/issue guidelines
+- [x] **Screenshots / GIF demo** — visual proof the app works and looks great
   - Capture a 5-10 second GIF of agents working in the office (procedural tileset for repo, LimeZu for personal use)
   - Static screenshots showing: empty office, busy office (3+ agents), agent detail panel, different themes
   - Embed in README hero section — a GIF is worth 1000 words for GitHub discovery
-- [ ] **GitHub Actions CI** — automated quality gates on every PR
+- [x] **GitHub Actions CI** — automated quality gates on every PR
   - Lint (`eslint`), type-check (`tsc --noEmit`), build (`vite build`) steps
   - Badge in README showing build status
   - Fast pipeline — skip Docker build, just validate source

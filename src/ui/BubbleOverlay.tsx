@@ -48,7 +48,7 @@ function getActiveChildCount(agent: Agent, allAgents: Map<string, Agent>): numbe
 export function BubbleOverlay({ canvasRef }: { canvasRef: React.RefObject<HTMLCanvasElement | null> }) {
   const agents = useOfficeStore((s) => s.agents);
   const overlayRef = useRef<HTMLDivElement>(null);
-  const [now, setNow] = useState(Date.now());
+  const [now, setNow] = useState(() => Date.now());
   // Track result flashes per supervisor agent ID
   const resultFlashesRef = useRef<Map<string, ResultFlash>>(new Map());
   // Track previous child sets to detect departures
@@ -143,6 +143,7 @@ export function BubbleOverlay({ canvasRef }: { canvasRef: React.RefObject<HTMLCa
 
   return (
     <div ref={overlayRef} className="bubble-overlay">
+      {/* eslint-disable react-hooks/refs -- refs used intentionally for per-frame flash state */}
       {agentList.map((agent) => {
         let text: string | null = null;
         if (agent.waitingForHuman) {

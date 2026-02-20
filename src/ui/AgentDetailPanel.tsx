@@ -31,7 +31,7 @@ export function AgentDetailPanel() {
   const agentToolTime = useOfficeStore((s) => s.agentToolTime);
   const selectAgent = useOfficeStore((s) => s.selectAgent);
 
-  const [now, setNow] = useState(Date.now());
+  const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);

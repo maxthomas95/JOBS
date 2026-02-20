@@ -73,6 +73,7 @@ export class DayNightCycle {
   }
 
   /** Called each frame from AnimationController */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   update(_deltaSeconds: number): void {
     if (!this._enabled) return;
 

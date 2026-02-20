@@ -62,6 +62,7 @@ function classifyTool(toolName: string): AgentState {
   return 'coding';
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function targetFor(agent: Agent, state: AgentState, _tool?: string): Point {
   if (state === 'thinking') {
     return tileToWorld(STATIONS.whiteboard);

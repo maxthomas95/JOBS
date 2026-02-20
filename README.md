@@ -1,5 +1,9 @@
 # J.O.B.S. — Jarvis Operations & Bot Surveillance
 
+[![CI](https://github.com/maxthomas95/JOBS/actions/workflows/ci.yml/badge.svg)](https://github.com/maxthomas95/JOBS/actions/workflows/ci.yml)
+
+![J.O.B.S. Office](jarvis.png)
+
 A self-hosted, browser-based pixel-art office that visualizes Claude Code agent activity in real-time. Each active coding session spawns a character who moves between stations — coding at a desk, thinking at a whiteboard, running commands at a terminal, searching at a library, grabbing coffee on a break.
 
 Multiple simultaneous sessions = a bustling office.
@@ -58,7 +62,7 @@ All hooks run as `async: true` so they never slow down Claude's work. See [Enhan
 ### Docker (recommended)
 
 ```bash
-git clone <repo-url> && cd jobs
+git clone https://github.com/maxthomas95/JOBS.git && cd JOBS
 docker compose up -d
 ```
 
@@ -269,6 +273,24 @@ src/                    React frontend
     audio/              14 .ogg samples (CC0)
 ```
 
+## Optional: Premium Tileset
+
+The default office uses a procedural renderer (colored rectangles). For detailed pixel art, you can add the [LimeZu Modern Office](https://limezu.itch.io/modernoffice) tileset ($2.50):
+
+1. Buy and download the tileset from itch.io
+2. Drop the PNG files into `src/assets/tiles/`:
+   - `Room_Builder_Office_16x16.png`
+   - `Modern_Office_16x16.png`
+3. Restart the dev server — the app auto-detects the images and switches renderers
+
+The tileset images are gitignored and never committed to the repo.
+
+## Screenshots
+
+| Office Overview | Agent Activity |
+|---|---|
+| ![Office](preview-2.png) | ![Activity](preview-3.png) |
+
 ## License
 
-MIT
+[MIT](LICENSE)
