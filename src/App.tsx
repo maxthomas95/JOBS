@@ -7,11 +7,18 @@ import { StatsPanel } from './ui/StatsPanel.js';
 import { useThemeStore } from './state/useThemeStore.js';
 
 function getWsUrl(): string {
+  let base: string;
   if (import.meta.env.DEV) {
-    return 'ws://localhost:8780/ws';
+    base = 'ws://localhost:8780/ws';
+  } else {
+    const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+    base = `${protocol}://${window.location.host}/ws`;
   }
-  const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
-  return `${protocol}://${window.location.host}/ws`;
+  const token = document.querySelector<HTMLMetaElement>('meta[name="jobs-token"]')?.content;
+  if (token) {
+    return `${base}?token=${encodeURIComponent(token)}`;
+  }
+  return base;
 }
 
 export default function App() {

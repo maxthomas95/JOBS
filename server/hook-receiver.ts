@@ -2,18 +2,43 @@ import { Router } from 'express';
 import { basename } from 'node:path';
 import type { SessionManager } from './session-manager.js';
 import type { WSServer } from './ws-server.js';
+import { safeString } from './sanitize.js';
 
-export function createHookRouter(sessionManager: SessionManager, wsServer: WSServer): Router {
+const ALLOWED_HOOK_EVENTS = new Set([
+  'Stop', 'SubagentStart', 'SubagentStop',
+  'SessionStart', 'SessionEnd',
+  'Notification', 'PermissionPrompt',
+  'PreToolUse', 'PostToolUse', 'PreCompact',
+  'TeammateIdle', 'TaskCompleted',
+]);
+
+export function createHookRouter(sessionManager: SessionManager, wsServer: WSServer, token: string | null = null): Router {
   const router = Router();
 
   router.post('/api/hooks', (req, res) => {
     try {
+      // Auth check — always return 200 to never block Claude
+      if (token) {
+        const authHeader = req.headers.authorization;
+        const headerToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
+        if (headerToken !== token) {
+          res.status(200).json({ ok: true });
+          return;
+        }
+      }
+
       const body = req.body as Record<string, unknown>;
-      const sessionId = body.session_id as string | undefined;
-      const hookEventName = body.hook_event_name as string | undefined;
+      const sessionId = safeString(body.session_id, 128);
+      const hookEventName = safeString(body.hook_event_name, 64);
 
       if (!sessionId || !hookEventName) {
-        res.status(400).json({ ok: false, error: 'session_id and hook_event_name are required' });
+        res.status(200).json({ ok: true });
+        return;
+      }
+
+      // Reject unknown hook events silently
+      if (!ALLOWED_HOOK_EVENTS.has(hookEventName)) {
+        res.status(200).json({ ok: true });
         return;
       }
 

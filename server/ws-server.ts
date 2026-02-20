@@ -11,11 +11,50 @@ export class WSServer {
   private snapshotTimer: ReturnType<typeof setTimeout> | null = null;
   private static readonly SNAPSHOT_THROTTLE_MS = 200;
 
-  constructor(server: http.Server, private readonly sessionManager: SessionManager, path = process.env.WS_PATH ?? '/ws') {
+  private readonly maxClients: number;
+  private readonly maxPerIp: number;
+  private readonly ipConnections = new Map<string, number>();
+  private readonly token: string | null;
+
+  constructor(
+    server: http.Server,
+    private readonly sessionManager: SessionManager,
+    path = process.env.WS_PATH ?? '/ws',
+    token: string | null = null,
+  ) {
+    this.maxClients = Number(process.env.WS_MAX_CLIENTS) || 50;
+    this.maxPerIp = Number(process.env.WS_MAX_PER_IP) || 10;
+    this.token = token;
+
     this.wss = new WebSocketServer({ server, path, maxPayload: 16 * 1024 });
-    this.wss.on('connection', (ws) => {
+    this.wss.on('connection', (ws, req) => {
+      // Auth check
+      if (this.token) {
+        const url = new URL(req.url ?? '/', 'http://localhost');
+        const clientToken = url.searchParams.get('token');
+        if (clientToken !== this.token) {
+          ws.close(4401, 'Unauthorized');
+          return;
+        }
+      }
+
+      // Global connection limit
+      if (this.wss.clients.size > this.maxClients) {
+        ws.close(1013, 'Too many connections');
+        return;
+      }
+
+      // Per-IP connection limit
+      const clientIp = req.socket.remoteAddress ?? 'unknown';
+      const currentCount = this.ipConnections.get(clientIp) ?? 0;
+      if (currentCount >= this.maxPerIp) {
+        ws.close(1013, 'Too many connections from this IP');
+        return;
+      }
+      this.ipConnections.set(clientIp, currentCount + 1);
+
       // eslint-disable-next-line no-console
-      console.log(`[ws] client connected (${this.wss.clients.size})`);
+      console.log(`[ws] client connected (${this.wss.clients.size}) [${clientIp}]`);
       this.sendSnapshot(ws);
       ws.on('message', (raw) => {
         const message = this.tryParse(raw.toString());
@@ -24,8 +63,14 @@ export class WSServer {
         }
       });
       ws.on('close', () => {
+        const count = this.ipConnections.get(clientIp) ?? 1;
+        if (count <= 1) {
+          this.ipConnections.delete(clientIp);
+        } else {
+          this.ipConnections.set(clientIp, count - 1);
+        }
         // eslint-disable-next-line no-console
-        console.log(`[ws] client disconnected (${Math.max(0, this.wss.clients.size - 1)})`);
+        console.log(`[ws] client disconnected (${Math.max(0, this.wss.clients.size - 1)}) [${clientIp}]`);
       });
     });
 

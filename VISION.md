@@ -612,12 +612,12 @@ open http://your-proxmox-host:8780
 ### v2-M8: Security Remediation — "Lock it down"
 > Audit before anyone else ever touches this.
 
-- [ ] **WebSocket authentication** — currently open, anyone on the network can connect
-- [ ] **Input sanitization audit** — event data hitting the DOM (XSS surface in agent names, tool names, bubble text)
-- [ ] **Rate limiting / connection limits** on the WS server
-- [ ] **Docker hardening** — non-root user, read-only filesystem where possible
-- [ ] **Dependency audit** — `npm audit`, prune unused deps
-- [ ] **Content Security Policy headers** for the static server
+- [x] **WebSocket authentication** — `JOBS_TOKEN` env var enables shared-token auth (meta tag injection for browsers)
+- [x] **Input sanitization audit** — `server/sanitize.ts` (safeString, safeUrl, safeEnum) + client-side URL validation
+- [x] **Rate limiting / connection limits** — 120 req/min API, 50 WS global cap, 10 per-IP cap
+- [x] **Docker hardening** — non-root user, read-only filesystem, cap_drop ALL, no-new-privileges, resource limits
+- [x] **Dependency audit** — `npm audit fix`, @types moved to devDeps
+- [x] **Content Security Policy headers** — CSP, X-Frame-Options, nosniff, Permissions-Policy
 - **Deliverable:** Production-safe for network exposure — ready for public release prep
 
 ---

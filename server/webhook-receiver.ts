@@ -1,22 +1,10 @@
 import { Router } from 'express';
 import type { SessionManager } from './session-manager.js';
 import type { WSServer } from './ws-server.js';
+import { safeString, safeUrl, safeEnum } from './sanitize.js';
 
-interface WebhookPayload {
-  source_id: string;
-  event: 'start' | 'stop' | 'status' | 'error' | 'heartbeat';
-  source_name?: string;
-  source_type?: string;
-  project?: string;
-  machine?: string;
-  state?: string;
-  activity?: string;
-  url?: string;
-  token?: string;
-}
-
-const REQUIRED_FIELDS = ['source_id', 'event'] as const;
-const VALID_EVENTS = new Set(['start', 'stop', 'status', 'error', 'heartbeat']);
+type WebhookEvent = 'start' | 'stop' | 'status' | 'error' | 'heartbeat';
+const VALID_EVENTS = new Set<WebhookEvent>(['start', 'stop', 'status', 'error', 'heartbeat']);
 
 export function createWebhookRouter(sessionManager: SessionManager, wsServer: WSServer): Router {
   const router = Router();
@@ -28,54 +16,62 @@ export function createWebhookRouter(sessionManager: SessionManager, wsServer: WS
       if (webhookToken) {
         const authHeader = req.headers.authorization;
         const headerToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
-        const bodyToken = (req.body as Record<string, unknown>)?.token as string | undefined;
+        const bodyToken = safeString((req.body as Record<string, unknown>)?.token, 256);
         if (headerToken !== webhookToken && bodyToken !== webhookToken) {
           res.status(401).json({ ok: false, error: 'Invalid or missing token' });
           return;
         }
       }
 
-      const body = req.body as WebhookPayload;
+      const body = req.body as Record<string, unknown>;
 
-      // Validate required fields
-      for (const field of REQUIRED_FIELDS) {
-        if (!body[field]) {
-          res.status(400).json({ ok: false, error: `${field} is required` });
-          return;
-        }
+      // Sanitize all fields
+      const sourceId = safeString(body.source_id, 128);
+      const event = safeEnum(body.event, VALID_EVENTS);
+
+      if (!sourceId) {
+        res.status(400).json({ ok: false, error: 'source_id is required' });
+        return;
       }
-
-      if (!VALID_EVENTS.has(body.event)) {
-        res.status(400).json({ ok: false, error: `Invalid event: ${body.event}` });
+      if (!event) {
+        res.status(400).json({ ok: false, error: 'Invalid or missing event' });
         return;
       }
 
-      const agentId = `wh:${body.source_id}`;
+      const sourceName = safeString(body.source_name, 64);
+      const sourceType = safeString(body.source_type, 64);
+      const project = safeString(body.project, 128);
+      const machine = safeString(body.machine, 64);
+      const state = safeString(body.state, 64);
+      const activity = safeString(body.activity, 200);
+      const url = safeUrl(body.url);
+
+      const agentId = `wh:${sourceId}`;
 
       // eslint-disable-next-line no-console
-      console.log(`[webhook] ${body.event} from ${body.source_name ?? body.source_id} (${agentId})`);
+      console.log(`[webhook] ${event} from ${sourceName ?? sourceId} (${agentId})`);
 
-      if (body.event === 'start') {
-        sessionManager.registerWebhookAgent(body.source_id, {
-          sourceName: body.source_name,
-          sourceType: body.source_type,
-          project: body.project,
-          machine: body.machine,
-          state: body.state,
-          activity: body.activity,
-          url: body.url,
+      if (event === 'start') {
+        sessionManager.registerWebhookAgent(sourceId, {
+          sourceName: sourceName ?? undefined,
+          sourceType: sourceType ?? undefined,
+          project: project ?? undefined,
+          machine: machine ?? undefined,
+          state: state ?? undefined,
+          activity: activity ?? undefined,
+          url: url ?? undefined,
         });
         wsServer.broadcastSnapshot();
         res.status(200).json({ ok: true, agentId });
         return;
       }
 
-      if (body.event === 'status') {
+      if (event === 'status') {
         const agent = sessionManager.updateWebhookAgent(
           agentId,
-          body.state ?? null,
-          body.activity ?? null,
-          body.url ?? null,
+          state ?? null,
+          activity ?? null,
+          url ?? null,
         );
         if (!agent) {
           res.status(404).json({ ok: false, error: 'Agent not found. Send start event first.' });
@@ -86,7 +82,7 @@ export function createWebhookRouter(sessionManager: SessionManager, wsServer: WS
         return;
       }
 
-      if (body.event === 'stop') {
+      if (event === 'stop') {
         const removed = sessionManager.removeWebhookAgent(agentId);
         if (!removed) {
           res.status(404).json({ ok: false, error: 'Agent not found' });
@@ -97,8 +93,8 @@ export function createWebhookRouter(sessionManager: SessionManager, wsServer: WS
         return;
       }
 
-      if (body.event === 'error') {
-        const agent = sessionManager.updateWebhookAgent(agentId, 'error', body.activity ?? 'Error', body.url ?? null);
+      if (event === 'error') {
+        const agent = sessionManager.updateWebhookAgent(agentId, 'error', activity ?? 'Error', url ?? null);
         if (!agent) {
           res.status(404).json({ ok: false, error: 'Agent not found' });
           return;
@@ -108,7 +104,7 @@ export function createWebhookRouter(sessionManager: SessionManager, wsServer: WS
         return;
       }
 
-      if (body.event === 'heartbeat') {
+      if (event === 'heartbeat') {
         const touched = sessionManager.touchWebhookAgent(agentId);
         if (!touched) {
           res.status(404).json({ ok: false, error: 'Agent not found' });

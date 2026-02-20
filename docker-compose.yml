@@ -6,12 +6,35 @@ services:
       - "8780:8780"
     volumes:
       - ${HOME}/.claude:/data/claude:ro
+      - jobs-data:/app/data
     environment:
       - CLAUDE_DIR=/data/claude
       - PORT=8780
       - WS_PATH=/ws
       - MOCK_EVENTS=false
+      - STATS_FILE=/app/data/stats.json
     restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:noexec,nosuid,size=64m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+          cpus: "1"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:8780/healthz').then(r=>{process.exit(r.ok?0:1)}).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     sysctls:
       - fs.inotify.max_user_watches=524288
       - fs.inotify.max_user_instances=256
+
+volumes:
+  jobs-data:

@@ -103,6 +103,9 @@ All variables are optional. Copy `.env.example` to `.env` to customize.
 | `MACHINE_ID` | _(auto)_ | Unique ID for this machine (multi-instance) |
 | `MACHINE_NAME` | _(hostname)_ | Display name for this machine in the HUD |
 | `WEBHOOK_TOKEN` | _(none)_ | If set, `POST /api/webhooks` requires Bearer auth |
+| `JOBS_TOKEN` | _(none)_ | If set, enables auth for WebSocket + `/api/hooks` (auto-injected to browser) |
+| `WS_MAX_CLIENTS` | `50` | Maximum total WebSocket connections |
+| `WS_MAX_PER_IP` | `10` | Maximum WebSocket connections per IP |
 | `JOBS_URL` | `http://localhost:8780` | JOBS server URL (used by remote hook scripts) |
 
 ## Enhanced Mode Setup
@@ -157,6 +160,25 @@ curl -X POST http://localhost:8780/api/webhooks \
 
 Webhook agents appear as full office citizens with desks, pathfinding, and bubbles. If `WEBHOOK_TOKEN` is set, include `Authorization: Bearer <token>` or a `token` field in the body.
 
+## Security
+
+J.O.B.S. is designed to be safe for network exposure.
+
+**Authentication (opt-in):** Set `JOBS_TOKEN` in your `.env` to enable shared-token auth. When set:
+- WebSocket connections require `?token=<value>` in the URL
+- `POST /api/hooks` requires `Authorization: Bearer <token>` header
+- Browser clients get the token auto-injected via `<meta>` tag — no manual config needed
+
+Without `JOBS_TOKEN`, everything works open (zero-config default for local use).
+
+**Input validation:** All webhook and hook payloads are sanitized through `server/sanitize.ts`. URLs are validated as http/https only — `javascript:` and `data:` protocols are rejected both server-side and client-side.
+
+**Rate limiting:** API routes are limited to 120 requests/minute/IP. WebSocket connections are capped at 50 total (`WS_MAX_CLIENTS`) and 10 per IP (`WS_MAX_PER_IP`).
+
+**Docker hardening:** The container runs as a non-root user (`jobs`), with a read-only filesystem, all capabilities dropped, `no-new-privileges`, and resource limits (512MB RAM, 1 CPU). Stats persist via a named volume.
+
+**Security headers:** CSP, X-Frame-Options DENY, X-Content-Type-Options nosniff, Referrer-Policy, Permissions-Policy.
+
 ## Event-to-Behavior Mapping
 
 | Event | State | Location |
@@ -194,10 +216,12 @@ server/                 Node.js backend
     pixel-events.ts     Event factories
     types.ts            Shared bridge types
   session-manager.ts    Agent lifecycle + desk assignment
-  ws-server.ts          WebSocket broadcast
+  ws-server.ts          WebSocket broadcast + auth + connection limits
   hook-receiver.ts      POST /api/hooks endpoint
   webhook-receiver.ts   POST /api/webhooks endpoint
   stats-store.ts        Persistent session statistics
+  sanitize.ts           Input validation (safeString, safeUrl, safeEnum)
+  rate-limit.ts         In-memory rate limiter middleware
   mock-events.ts        Fake event generator for testing
   setup-hooks.js        One-command hooks + Codex setup
   hooks/                Hook notify scripts

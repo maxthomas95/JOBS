@@ -119,14 +119,25 @@ export function AgentDetailPanel() {
         </div>
       ) : null}
 
-      {agent.sourceUrl ? (
-        <div className="detail-row">
-          <span className="detail-label">Source</span>
-          <a className="detail-value detail-link" href={agent.sourceUrl} target="_blank" rel="noopener noreferrer">
-            {agent.sourceName || 'View'}
-          </a>
-        </div>
-      ) : null}
+      {agent.sourceUrl ? (() => {
+        let isSafeUrl = false;
+        try {
+          const parsed = new URL(agent.sourceUrl);
+          isSafeUrl = parsed.protocol === 'http:' || parsed.protocol === 'https:';
+        } catch { /* invalid URL */ }
+        return (
+          <div className="detail-row">
+            <span className="detail-label">Source</span>
+            {isSafeUrl ? (
+              <a className="detail-value detail-link" href={agent.sourceUrl} target="_blank" rel="noopener noreferrer">
+                {agent.sourceName || 'View'}
+              </a>
+            ) : (
+              <span className="detail-value detail-mono">{agent.sourceName || agent.sourceUrl}</span>
+            )}
+          </div>
+        );
+      })() : null}
 
       <div className="detail-row">
         <span className="detail-label">Status</span>

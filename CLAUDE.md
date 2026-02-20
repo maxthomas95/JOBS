@@ -23,10 +23,12 @@ The system has two main parts connected by WebSocket:
 **Server (`server/`)** — Node.js process that watches Claude Code JSONL session files, strips sensitive data (code, file paths to basenames, bash commands to descriptions), and broadcasts normalized `PixelEvent` objects to browsers.
 - `bridge/` — Core modules extracted from pixelhq-bridge (MIT): watcher, parser, claude-adapter, events, types
 - `session-manager.ts` — Discovers active sessions, assigns agent IDs, tracks agent lifecycle state machine
-- `ws-server.ts` — WebSocket broadcast to all connected browsers
+- `ws-server.ts` — WebSocket broadcast to all connected browsers, with auth + connection limits
 - `hook-receiver.ts` — POST /api/hooks endpoint for Claude Code hooks
 - `webhook-receiver.ts` — POST /api/webhooks endpoint for external sources (CI, Codex, etc.)
 - `stats-store.ts` — Persistent session statistics (JSON file, survives restarts)
+- `sanitize.ts` — Input validation utilities (safeString, safeUrl, safeEnum) for webhook/hook payloads
+- `rate-limit.ts` — In-memory sliding-window rate limiter (no external dependencies)
 
 **Client (`src/`)** — React app with PixiJS canvas overlay:
 - `engine/` — PixiJS rendering: tilemap (20x15 grid, 16px tiles), agent sprites, A* pathfinding, animation controller, station manager, ambient effects
@@ -52,3 +54,12 @@ Milestones v1 (M1-M5) and v2 (M1-M6) are complete. Currently in v2-M7 (Stabiliza
 - **Sprites:** Clawdachi GIF blob via @pixi/gif (clone-per-agent), with 32x32folk.png fallback
 - **Desk assignment:** First-come-first-served (FIFO), dynamic count from map config (16 main + 1 supervisor with Tiled map)
 - **No socket.io:** Uses native WebSocket client + ws server to avoid overhead
+
+## Security (v2-M8)
+
+- **Authentication:** Set `JOBS_TOKEN` env var to enable shared-token auth for WebSocket and `/api/hooks`. Token is auto-injected into the HTML page via `<meta>` tag; browser clients read it automatically. If unset, auth is disabled (zero-config default).
+- **Input sanitization:** All webhook/hook payloads validated through `server/sanitize.ts` (safeString, safeUrl, safeEnum). URLs must be http/https — `javascript:` and `data:` protocols are rejected server-side and client-side.
+- **Rate limiting:** API routes limited to 120 req/min/IP, healthz to 30 req/min/IP. In-memory sliding window, no external dependencies.
+- **WebSocket limits:** `WS_MAX_CLIENTS` (default 50) global cap, `WS_MAX_PER_IP` (default 10) per-IP cap.
+- **CSP headers:** Strict Content-Security-Policy, X-Frame-Options DENY, nosniff, Permissions-Policy.
+- **Docker:** Non-root user (`jobs`), read-only filesystem, `cap_drop: ALL`, `no-new-privileges`, resource limits (512MB/1CPU).
