@@ -180,7 +180,7 @@ export function BubbleOverlay({ canvasRef }: { canvasRef: React.RefObject<HTMLCa
             {(text || showTimer) ? (
               <div
                 data-agent-id={agent.id}
-                data-offset-y="-20"
+                data-offset-y="7"
                 className="speech-bubble"
                 style={{ background: style.background, color: style.color }}
               >
@@ -197,7 +197,7 @@ export function BubbleOverlay({ canvasRef }: { canvasRef: React.RefObject<HTMLCa
             ) : null}
             <div
               data-agent-id={agent.id}
-              data-offset-y="16"
+              data-offset-y="2"
               className="sprite-label"
             >
               {nameLabel}
@@ -218,7 +218,7 @@ export function BubbleOverlay({ canvasRef }: { canvasRef: React.RefObject<HTMLCa
           <Fragment key={`checkin-${supervisorId}`}>
             <div
               data-agent-id={supervisorId}
-              data-offset-y="-40"
+              data-offset-y="12"
               className="speech-bubble checkin-bubble"
               style={{ background: '#ffd54f', color: '#000', fontSize: '0.7em' }}
             >
