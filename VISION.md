@@ -670,15 +670,62 @@ open http://your-proxmox-host:8780
 - [ ] **README for external users** — setup, config, architecture overview
   - Clear "Quick Start" section: clone, install, `docker compose up`
   - Document environment variables and optional config
-  - Screenshots / GIF demo of the running office
   - "Optional: Premium Tileset" section with LimeZu instructions
 - [ ] **Strip machine-specific config** — ensure no hardcoded paths or personal details
   - All paths use environment variables (`CLAUDE_DIR`, `PORT`)
   - No references to personal Proxmox setup in committed config
 - [ ] **Contributing guide** — basic PR/issue guidelines
+- [ ] **Screenshots / GIF demo** — visual proof the app works and looks great
+  - Capture a 5-10 second GIF of agents working in the office (procedural tileset for repo, LimeZu for personal use)
+  - Static screenshots showing: empty office, busy office (3+ agents), agent detail panel, different themes
+  - Embed in README hero section — a GIF is worth 1000 words for GitHub discovery
+- [ ] **GitHub Actions CI** — automated quality gates on every PR
+  - Lint (`eslint`), type-check (`tsc --noEmit`), build (`vite build`) steps
+  - Badge in README showing build status
+  - Fast pipeline — skip Docker build, just validate source
 - **Deliverable:** `git clone` → `docker compose up` → working pixel office, for anyone
 
+### Demo Mode — "Try before you wire"
+> Let anyone experience J.O.B.S. instantly — no Claude Code sessions required. A built-in demo that showcases every feature using the mock event system that already exists server-side.
+
+- [ ] **Client-side demo toggle** — `?demo=true` URL param or DEMO button in the HUD header
+  - Activates mock event generation without requiring `MOCK_EVENTS` env var
+  - Server accepts a WS message `{ type: 'startDemo', mode: 'normal' }` to begin mock playback
+  - Mode selector: normal (single agent lifecycle), supervisor (team dynamics), webhook (multi-provider), multi (multi-instance)
+  - Demo badge in corner: `"DEMO MODE"` with a stop button
+- [ ] **Auto-demo on empty office** — optional feature for public-facing instances
+  - When no real sessions are active for N minutes, automatically start demo playback
+  - Real sessions instantly override demo agents (demo agents walk out, real ones walk in)
+  - Configurable via `DEMO_IDLE_TIMEOUT` env var (default: disabled)
+- [ ] **Guided walkthrough** (stretch goal) — tooltip-style tour for first-time visitors
+  - Highlight each HUD element in sequence: roster, detail panel, activity feed, stats, controls
+  - Skip button, auto-advance after 5s per tooltip
+- **Deliverable:** Anyone can experience J.O.B.S. in 5 seconds — paste the URL, see agents working
+
+### Dashboard / Kiosk Mode — "Put it on the wall"
+> Full-screen mode optimized for wall-mounted displays, lobby screens, and always-on monitors.
+
+- [ ] **Kiosk toggle** — `?kiosk=true` URL param or `K` keyboard shortcut
+  - Hides browser chrome suggestion (fullscreen API)
+  - Scales canvas to fill viewport, HUD elements resize proportionally
+  - Larger fonts, thicker borders, higher contrast for distance viewing
+  - Auto-hides mouse cursor after 3s of inactivity
+- [ ] **Minimal HUD variant** — show only essential info in kiosk mode
+  - Agent count badge, connection status dot, clock
+  - Activity feed auto-scrolls with larger text
+  - Agent names visible on sprites (larger labels)
+  - Full HUD accessible via mouse hover on edges
+- [ ] **Auto-rotate focus** — cycle through agents on a timer
+  - Every 30s (configurable), camera smoothly pans to a different active agent
+  - Shows their detail card briefly, then moves on
+  - Pairs with follow mode zoom for close-up views
+- **Deliverable:** A living wallpaper for your office — glance up and know what every agent is doing
+
 ---
+
+## Moonshots
+
+> Big, ambitious features that touch multiple systems and require significant effort. Each one would be a marquee feature — but they're not small.
 
 ### Moonshot: Live Terminal View
 > Click a sprite, see its live session — a visual Claude Code dashboard.
@@ -834,6 +881,197 @@ open http://your-proxmox-host:8780
   - Multiple rooms connected by doors (each room is a separate grid, door tiles link them)
   - Agents pathfind across rooms via door transitions
 - **Deliverable:** Your office, your rules — drag desks, rearrange stations, and the little guys figure it out
+
+### Moonshot: Time-Lapse Replay — "Rewind the day"
+> Record every event, replay the entire day at high speed. Like a security camera playback for your AI workforce.
+
+- [ ] **Event recording** — persist all PixelEvents to a replayable log
+  - Server writes timestamped event stream to `data/replay-YYYY-MM-DD.jsonl`
+  - One file per day, auto-rotated, configurable retention (default: 7 days)
+  - Includes all agent lifecycle events, state transitions, tool usage
+- [ ] **Replay engine** — client-side event playback with time control
+  - Load a replay file via `/api/replay/:date` endpoint
+  - Playback speeds: 1x, 5x, 10x, 50x, 100x
+  - Scrub bar with time markers showing agent activity density
+  - Play/pause, skip forward/backward by 5 minutes
+- [ ] **Visual timeline** — minimap of the day's activity
+  - Horizontal bar showing active agents over time (stacked colored segments)
+  - Click anywhere on the timeline to jump to that moment
+  - Hover to preview: "3 agents active, Ada writing auth.ts"
+- [ ] **Side-by-side comparison** (stretch goal) — replay two days simultaneously
+  - Split view: yesterday's office vs today's office
+  - Useful for spotting patterns (when are agents most active, common error times)
+- **Deliverable:** Watch your entire day of AI coding condensed into 60 seconds — mesmerizing and insightful
+
+### Moonshot: Multi-Tool Agent Adapters — "One office, every AI"
+> Purpose-built adapters for other AI coding tools, so J.O.B.S. becomes the unified dashboard for all your AI agents — not just Claude Code.
+>
+> **Current state:** The generic webhook adapter (`POST /api/webhooks`) already supports any tool that can send HTTP. The Codex CLI adapter proves the pattern works. But purpose-built adapters with file watchers can provide zero-config, real-time granularity — just like the Claude Code JSONL integration.
+
+- [ ] **Cursor adapter** — watch Cursor's session/log files
+  - Detect Cursor's workspace state files or extension logs
+  - Map Cursor actions (edit, generate, chat, apply) to agent states
+  - Zero-config file watcher (like Claude's JSONL), with webhook fallback
+- [ ] **Windsurf adapter** — watch Codeium/Windsurf activity
+  - Similar approach: detect activity files, map to agent states
+  - Provider badge: `WINDSURF`
+- [ ] **Aider adapter** — parse Aider's git-based workflow
+  - Watch for Aider's commit messages and chat history files
+  - Map to states: thinking, coding (commit), searching (repo map)
+  - Provider badge: `AIDER`
+- [ ] **Generic file watcher template** — make it easy to add new tools
+  - Abstract base class: define log file location + event parser
+  - Documentation: "Add your AI tool in 50 lines"
+  - Community contribution path for tools we don't use ourselves
+- **Deliverable:** Every AI coding tool in one office — Claude, Codex, Cursor, Windsurf, Aider, side by side
+
+### Moonshot: Spectator Mode — "Watch from anywhere"
+> Shareable, read-only links that let teammates or friends watch your office without running their own instance.
+
+- [ ] **Spectator route** — lightweight viewer with no controls
+  - `/spectate` or `/spectate/:token` route serving a minimal client
+  - Read-only WebSocket connection: receives snapshots and events, cannot send commands
+  - No HUD controls (no follow, no audio toggle) — just watch
+  - Mobile-friendly: responsive canvas, touch-friendly agent labels
+- [ ] **Shareable links** — generate time-limited or permanent spectator URLs
+  - `POST /api/spectate/link` generates a unique token (UUID)
+  - Optional expiry: 1 hour, 24 hours, permanent
+  - Revoke links via `DELETE /api/spectate/link/:token`
+  - Rate-limited: max 5 active spectator links
+- [ ] **Spectator count indicator** — show how many people are watching
+  - Small eye icon + count in the owner's HUD: `"3 watching"`
+  - Spectators see each other's cursor positions (optional, for fun)
+- [ ] **Embed mode** — iframe-friendly spectator view
+  - `?embed=true` strips all chrome, outputs just the canvas
+  - Suitable for embedding in Notion pages, blog posts, dashboards
+  - Configurable dimensions via URL params
+- **Deliverable:** Share a link, let your team watch the AI workforce in real-time — from anywhere
+
+### Moonshot: Agent Personality System — "Give them character"
+> Assign persistent personality traits to agent names that affect their visual behavior. Ada is always methodical. Linus is always fast. Grace never panics. Pure flavor, zero data dependency.
+
+- [ ] **Personality trait definitions** — small set of behavioral modifiers
+  - Speed: `fast` (1.5x animation), `normal` (1x), `deliberate` (0.7x)
+  - Anxiety: `calm` (smooth transitions, no error shake), `nervous` (jittery idle, dramatic errors)
+  - Sociability: `social` (walks closer to other agents' desks on coffee breaks), `focused` (beelines desk-to-station)
+  - Style: `tidy` (precise pathfinding, minimal wandering), `chaotic` (occasional random detours)
+- [ ] **Name-to-personality mapping** — deterministic from agent name
+  - Hash the name to pick trait values (same name always gets same personality)
+  - Override via config file: `personalities.json` with `{ "Ada": { speed: "deliberate", anxiety: "calm" } }`
+- [ ] **Visual expression** — personality affects animations
+  - Fast agents: quicker walk cycle, snappier transitions
+  - Nervous agents: idle fidget animation, exaggerated error reaction
+  - Social agents: linger near other agents at the coffee machine, occasional "wave" interaction
+  - Chaotic agents: take slightly non-optimal paths, wander during idle
+- [ ] **Personality badge** — optional indicator in agent detail panel
+  - Small trait summary: `"Calm, Deliberate, Focused"`
+  - Visible in roster on hover
+- **Deliverable:** Every agent feels like an individual — not just a different color, but a different character
+
+### Moonshot: AI-Generated Floor Plans — "Describe your office"
+> Type what you want, get a floor plan. Uses LLM structured output to generate valid map JSON from natural language descriptions.
+
+- [ ] **Prompt-to-layout pipeline** — natural language → map config JSON
+  - Input: `"Cozy 4-person office with a big library and a balcony"` or `"Open plan startup with 20 desks and a ping pong table"`
+  - Output: valid MapConfig JSON (tile grid, stations, walkability)
+  - Use Claude API (or any LLM with structured output) with the MapConfig JSON schema as the output format
+  - Validate: all stations reachable from door, walkability grid consistent, desk count matches request
+- [ ] **Preview and tweak** — show generated layout before applying
+  - Render preview in a modal before committing
+  - "Regenerate" button for a new attempt
+  - "Apply" commits to the live office (agents reposition)
+- [ ] **Prompt templates** — quick presets with customizable parameters
+  - "Startup (N desks)" — open plan, bean bags, whiteboard wall
+  - "Corporate (N desks)" — cubicle rows, corner offices, conference room
+  - "Home office (N desks)" — cozy, plants, window seats
+  - Slider for desk count, dropdown for vibe
+- [ ] **Layout gallery** — community-shared floor plans
+  - Export layout as shareable JSON (with metadata: name, description, author)
+  - Import from URL or paste JSON
+  - Curated gallery of interesting layouts (stretch goal)
+- **Deliverable:** "Make me a cyberpunk hacker den with 8 desks" → it just works
+
+
+### Outbound Notifications — "Tell the team"
+> Push alerts to Slack, Discord, or any webhook endpoint when agents need attention or finish work.
+
+- [ ] **Notification rules engine** — configurable triggers
+  - Agent enters "waiting for human" → notify immediately
+  - Agent errors → notify with error context
+  - Agent completes session → summary notification (tools used, duration)
+  - All agents idle for N minutes → "office is quiet" digest
+- [ ] **Slack integration** — native webhook format
+  - `SLACK_WEBHOOK_URL` env var for zero-config setup
+  - Rich message formatting: agent name, state, project, duration
+  - Thread replies for follow-up events on the same agent
+- [ ] **Discord integration** — native webhook format
+  - `DISCORD_WEBHOOK_URL` env var
+  - Embed formatting with color-coded state indicators
+- [ ] **Generic outbound webhook** — for any HTTP endpoint
+  - `NOTIFY_WEBHOOK_URL` env var with standardized JSON payload
+  - Configurable event filter (which events trigger notifications)
+  - Retry with exponential backoff (3 attempts, then drop)
+- **Deliverable:** "Ada needs your input" pops up in Slack — never miss a waiting agent again
+
+---
+
+## The Whiteboard — "Ideas sketched out, not committed"
+
+> Features that are scoped out and ready to build — but not on any timeline. The kind of thing we'd pick up if the community asks for it, or if a rainy weekend lines up with motivation. Not saying no, just not saying when.
+
+### Sound Packs — "Change the vibe"
+> Swap between audio themes to match your mood or office aesthetic.
+
+- [ ] **Sound pack abstraction** — decouple sound IDs from file paths
+  - Sound pack config: `{ id, name, files: Record<SoundId, string> }` mapping
+  - AudioManager loads files from the active pack
+  - Packs can override individual sounds or provide a full set
+- [ ] **Built-in packs** — ship with 2-3 options
+  - `office` (default) — current CC0 office sounds
+  - `retro-arcade` — 8-bit chiptune typing, coin-collect chimes, arcade ambient
+  - `nature` — rain ambience, bird chirps for notifications, wind for idle
+- [ ] **Custom sound pack support** — drop a folder, get new sounds
+  - Place files in `src/assets/audio/{pack-name}/` matching expected sound IDs
+  - Auto-discovered at build time, selectable in settings
+- [ ] **Pack selector in settings** — dropdown or radio buttons in the Settings Menu
+  - Preview button to hear a sample of each pack
+  - Persists selection to localStorage
+- **Deliverable:** Same office, completely different feel — retro arcade one day, rainy cabin the next
+
+### Keyboard Shortcuts — "Power user mode"
+> Quick access to every control without hunting for tiny buttons.
+
+- [ ] **Core shortcuts** — immediate impact, no config needed
+  - `M` — toggle audio mute
+  - `T` — cycle theme (dark → bright → neon → retro)
+  - `D` — toggle day/night cycle
+  - `N` — toggle browser notifications
+  - `Escape` — unfollow agent / close detail panel / exit demo mode
+  - `F` — follow the currently selected agent
+  - `S` — toggle stats panel
+- [ ] **Navigation shortcuts** — move between agents
+  - `Tab` / `Shift+Tab` — cycle through agents in roster order
+  - `1`-`9` — select agent by roster position
+  - `Enter` — open detail panel for selected agent
+- [ ] **Shortcut hint overlay** — `?` key shows all available shortcuts
+  - Semi-transparent overlay listing all bindings
+  - Dismisses on any keypress or click
+- **Deliverable:** Never touch the mouse — full control from the keyboard
+
+### Stats Export — "Show me the numbers"
+> Get your agent productivity data out of J.O.B.S. for analysis, reporting, or bragging rights.
+
+- [ ] **CSV export** — one-click download from the stats panel
+  - Session history: agent name, project, start time, end time, duration, tools used
+  - Daily summary: date, session count, total hours, top tools
+  - Filename: `jobs-stats-YYYY-MM-DD.csv`
+- [ ] **JSON export** — full stats dump for programmatic consumption
+  - Same data as `/api/stats` endpoint but as a downloadable file
+  - Useful for feeding into dashboards (Grafana, Google Sheets, etc.)
+- [ ] **Date range filter** — export specific time periods
+  - Quick presets: Today, This Week, This Month, All Time
+  - Custom date picker for arbitrary ranges
+- **Deliverable:** Your AI coding metrics, in a spreadsheet — track trends, prove value, settle arguments
 
 ---
 
