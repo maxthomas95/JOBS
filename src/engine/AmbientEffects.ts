@@ -16,13 +16,6 @@ const GLOW_COLOR = 0x42a5f5;
 const GLOW_ALPHA_MIN = 0.1;
 const GLOW_ALPHA_MAX = 0.3;
 
-// --- Clock constants ---
-const CLOCK_TILE = { x: 14, y: 1 };
-const CLOCK_CENTER = tileToWorld(CLOCK_TILE);
-const CLOCK_RADIUS = 6;
-const HOUR_HAND_LENGTH = 3;
-const MINUTE_HAND_LENGTH = 5;
-
 // --- Coffee steam constants ---
 const STEAM_MAX_PARTICLES = 8;
 const STEAM_LIFETIME = 2; // seconds
@@ -45,12 +38,6 @@ export class AmbientEffects {
   // Desk glow
   private readonly deskGlows: Graphics[] = [];
 
-  // Clock
-  private clockFace: Graphics | null = null;
-  private clockHourHand: Graphics | null = null;
-  private clockMinuteHand: Graphics | null = null;
-  private lastClockSeconds = -1;
-
   // Coffee steam
   private readonly steamParticles: SteamParticle[] = [];
   private steamSpawnTimer = 0;
@@ -65,14 +52,12 @@ export class AmbientEffects {
 
   init(): void {
     this.initDeskGlows();
-    this.initClock();
     this.initSteam();
   }
 
   update(deltaSeconds: number, agents: Map<string, Agent>): void {
     this.phase += deltaSeconds;
     this.updateDeskGlows(agents);
-    this.updateClock();
     this.updateSteam(deltaSeconds, agents);
   }
 
@@ -81,10 +66,6 @@ export class AmbientEffects {
       glow.destroy();
     }
     this.deskGlows.length = 0;
-
-    this.clockFace?.destroy();
-    this.clockHourHand?.destroy();
-    this.clockMinuteHand?.destroy();
 
     for (const p of this.steamParticles) {
       p.graphic.destroy();
@@ -132,74 +113,6 @@ export class AmbientEffects {
         glow.visible = false;
       }
     }
-  }
-
-  // ─── Wall Clock ───────────────────────────────────────────
-
-  private initClock(): void {
-    // Clock face: dark circle with 4 tick marks
-    this.clockFace = new Graphics();
-    // Dark circular face
-    this.clockFace.circle(CLOCK_CENTER.x, CLOCK_CENTER.y, CLOCK_RADIUS).fill(0x1a1a2e);
-    this.clockFace.circle(CLOCK_CENTER.x, CLOCK_CENTER.y, CLOCK_RADIUS).stroke({ color: 0x555566, width: 1 });
-    // 4 tick marks at 12, 3, 6, 9
-    const tickLen = 1.5;
-    const tickInner = CLOCK_RADIUS - tickLen - 0.5;
-    for (let h = 0; h < 4; h++) {
-      const angle = (h * Math.PI) / 2 - Math.PI / 2;
-      const cos = Math.cos(angle);
-      const sin = Math.sin(angle);
-      this.clockFace
-        .moveTo(CLOCK_CENTER.x + cos * tickInner, CLOCK_CENTER.y + sin * tickInner)
-        .lineTo(CLOCK_CENTER.x + cos * (tickInner + tickLen), CLOCK_CENTER.y + sin * (tickInner + tickLen))
-        .stroke({ color: 0xaaaacc, width: 0.5 });
-    }
-    this.container.addChild(this.clockFace);
-
-    // Hour hand
-    this.clockHourHand = new Graphics();
-    this.container.addChild(this.clockHourHand);
-
-    // Minute hand
-    this.clockMinuteHand = new Graphics();
-    this.container.addChild(this.clockMinuteHand);
-  }
-
-  private updateClock(): void {
-    if (!this.clockHourHand || !this.clockMinuteHand) return;
-
-    const now = new Date();
-    const seconds = now.getSeconds();
-    if (seconds === this.lastClockSeconds) return;
-    this.lastClockSeconds = seconds;
-
-    const hours = now.getHours() % 12;
-    const minutes = now.getMinutes();
-
-    // Hour hand angle: -PI/2 offset so 12 o'clock is up
-    const hourAngle = ((hours + minutes / 60) / 12) * Math.PI * 2 - Math.PI / 2;
-    // Minute hand angle
-    const minuteAngle = ((minutes + seconds / 60) / 60) * Math.PI * 2 - Math.PI / 2;
-
-    // Redraw hour hand
-    this.clockHourHand.clear();
-    this.clockHourHand
-      .moveTo(CLOCK_CENTER.x, CLOCK_CENTER.y)
-      .lineTo(
-        CLOCK_CENTER.x + Math.cos(hourAngle) * HOUR_HAND_LENGTH,
-        CLOCK_CENTER.y + Math.sin(hourAngle) * HOUR_HAND_LENGTH,
-      )
-      .stroke({ color: 0xddddee, width: 1 });
-
-    // Redraw minute hand
-    this.clockMinuteHand.clear();
-    this.clockMinuteHand
-      .moveTo(CLOCK_CENTER.x, CLOCK_CENTER.y)
-      .lineTo(
-        CLOCK_CENTER.x + Math.cos(minuteAngle) * MINUTE_HAND_LENGTH,
-        CLOCK_CENTER.y + Math.sin(minuteAngle) * MINUTE_HAND_LENGTH,
-      )
-      .stroke({ color: 0xccccdd, width: 0.5 });
   }
 
   // ─── Coffee Steam ────────────────────────────────────────
