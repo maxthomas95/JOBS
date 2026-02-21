@@ -15,6 +15,20 @@ import { createWebhookRouter } from './webhook-receiver.js';
 import { StatsStore } from './stats-store.js';
 import { createRateLimiter } from './rate-limit.js';
 
+/** Extract parent session UUID from a subagent file path.
+ *  Path: ~/.claude/projects/<project>/<parent-uuid>/subagents/<child-uuid>.jsonl */
+function extractParentFromPath(filePath: string): string | undefined {
+  const normalized = filePath.replace(/\\/g, '/');
+  const marker = '/projects/';
+  const idx = normalized.indexOf(marker);
+  if (idx === -1) return undefined;
+  const parts = normalized.slice(idx + marker.length).split('/').filter(Boolean);
+  if (parts.length === 4 && parts[2] === 'subagents') {
+    return parts[1];
+  }
+  return undefined;
+}
+
 const app = express();
 const port = Number(process.env.PORT ?? 8780);
 const rawClaudeDir = process.env.CLAUDE_DIR ?? join(homedir(), '.claude');
@@ -124,10 +138,10 @@ if (useMock) {
 } else {
   watcher = new SessionWatcher(claudeDir);
 
-  watcher.on('session', ({ sessionId, filePath, agentId }) => {
+  watcher.on('session', ({ sessionId, filePath, agentId, isSubAgent, parentSessionId }) => {
     // eslint-disable-next-line no-console
-    console.log(`[watcher] session ${sessionId} (${filePath})`);
-    sessionManager.registerSession(sessionId, filePath);
+    console.log(`[watcher] session ${sessionId} (${filePath})${isSubAgent ? ` [subagent of ${parentSessionId?.slice(0, 12)}…]` : ''}`);
+    sessionManager.registerSession(sessionId, filePath, parentSessionId);
     const started = createSessionEvent(sessionId, 'started', {
       agentId,
       project: filePath,
@@ -141,7 +155,7 @@ if (useMock) {
   watcher.on('line', ({ line, sessionId, agentId, filePath }) => {
     // Re-register if session was evicted but file is still active
     if (!sessionManager.hasSession(sessionId)) {
-      const restored = sessionManager.registerSession(sessionId, filePath);
+      const restored = sessionManager.registerSession(sessionId, filePath, extractParentFromPath(filePath));
       // eslint-disable-next-line no-console
       console.log(`[watcher] re-registering evicted session ${sessionId} (as "${restored.name}")`);
       const restarted = createSessionEvent(sessionId, 'started', {

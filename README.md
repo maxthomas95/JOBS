@@ -51,7 +51,7 @@ Claude Code hook fires  →  async script POSTs to JOBS server
 Claude Code's [hooks system](https://docs.anthropic.com/en/docs/claude-code/hooks) can send events directly to the JOBS server, filling gaps that JSONL file watching can't cover:
 
 - **Instant "waiting for human" detection** — the `Stop` hook fires the moment Claude finishes, replacing an 8-second silence heuristic
-- **Deterministic parent-child linking** — `SubagentStart`/`SubagentStop` hooks link teams immediately, replacing a 10-second timing window
+- **Deterministic parent-child linking** — `SubagentStart`/`SubagentStop` hooks link teams immediately. Without hooks, subagent JSONL file paths (which embed the parent session UUID) provide reliable linking; the 10-second timing heuristic is now a last-resort fallback
 - **"Needs Approval" state** — `Notification` hooks surface permission prompts as a visible agent state (currently invisible via JSONL)
 - **Context compaction awareness** — `PreCompact` hook shows when an agent is compressing its memory
 

@@ -39,6 +39,8 @@ export interface WatchSessionPayload {
   agentId: string;
   filePath: string;
   isSubAgent?: boolean;
+  /** Parent session UUID extracted from subagent file path */
+  parentSessionId?: string;
 }
 
 export interface WatchLinePayload {

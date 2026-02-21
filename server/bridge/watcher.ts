@@ -16,32 +16,35 @@ function normalizePath(path: string): string {
 interface SessionJsonlResult {
   valid: boolean;
   isSubAgent: boolean;
+  /** Parent session UUID extracted from the file path (only set when isSubAgent is true) */
+  parentSessionId: string | null;
 }
 
 function isSessionJsonl(filePath: string): SessionJsonlResult {
   const normalized = normalizePath(filePath);
   if (!normalized.endsWith('.jsonl')) {
-    return { valid: false, isSubAgent: false };
+    return { valid: false, isSubAgent: false, parentSessionId: null };
   }
   if (normalized.endsWith('/history.jsonl')) {
-    return { valid: false, isSubAgent: false };
+    return { valid: false, isSubAgent: false, parentSessionId: null };
   }
   const marker = '/projects/';
   const markerIndex = normalized.indexOf(marker);
   if (markerIndex === -1) {
-    return { valid: false, isSubAgent: false };
+    return { valid: false, isSubAgent: false, parentSessionId: null };
   }
   const relative = normalized.slice(markerIndex + marker.length);
   const parts = relative.split('/').filter(Boolean);
   // Match ~/.claude/projects/<project>/<session>.jsonl (main sessions)
   if (parts.length === 2) {
-    return { valid: true, isSubAgent: false };
+    return { valid: true, isSubAgent: false, parentSessionId: null };
   }
   // Match ~/.claude/projects/<project>/<parent-session>/subagents/<session>.jsonl (sub-agent sessions)
+  // parts[1] is the parent session UUID
   if (parts.length === 4 && parts[2] === 'subagents') {
-    return { valid: true, isSubAgent: true };
+    return { valid: true, isSubAgent: true, parentSessionId: parts[1] };
   }
-  return { valid: false, isSubAgent: false };
+  return { valid: false, isSubAgent: false, parentSessionId: null };
 }
 
 export class SessionWatcher extends EventEmitter {
@@ -109,7 +112,11 @@ export class SessionWatcher extends EventEmitter {
       const agentId = sessionId;
       if (!this.announcedSessions.has(sessionId)) {
         this.announcedSessions.add(sessionId);
-        const sessionPayload: WatchSessionPayload = { sessionId, agentId, filePath, isSubAgent: check.isSubAgent };
+        const sessionPayload: WatchSessionPayload = {
+          sessionId, agentId, filePath,
+          isSubAgent: check.isSubAgent,
+          parentSessionId: check.parentSessionId ?? undefined,
+        };
         this.emit('session', sessionPayload);
       }
 

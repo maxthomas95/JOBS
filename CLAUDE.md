@@ -38,7 +38,9 @@ The system has two main parts connected by WebSocket:
 
 **Data flow (two paths, merged in session-manager):**
 1. **JSONL watching (always-on, zero-config):** Claude Code writes JSONL → chokidar detects → parser extracts → adapter strips sensitive data → event factory normalizes → session manager tags with agentId → WebSocket broadcasts → Zustand store updates → animation controller maps state to behavior → PixiJS renders.
-2. **Claude Code hooks (opt-in, v2-M6):** Hook fires → async script POSTs to `/api/hooks` → session-manager merges with JSONL stream → same downstream path. Fills accuracy gaps: instant "waiting for human" (replaces 8s heuristic), deterministic parent-child linking (replaces 10s spawn window), new states like "needs approval" and "compacting."
+2. **Claude Code hooks (opt-in, v2-M6):** Hook fires → async script POSTs to `/api/hooks` → session-manager merges with JSONL stream → same downstream path. Fills accuracy gaps: instant "waiting for human" (replaces 8s heuristic), deterministic parent-child linking, new states like "needs approval" and "compacting."
+
+**Subagent parent linking** uses a priority chain: (1) hooks (`SubagentStart`) — most reliable, (2) file-path extraction — subagent JSONL paths embed the parent UUID (`<project>/<parent-uuid>/subagents/<child>.jsonl`), (3) time-window heuristic — 10s after parent's `Task` tool use (last resort).
 
 **Event-to-behavior mapping** drives the entire visualization: each bridge event type (session.started, tool.file_write, activity.thinking, etc.) maps to an agent state, office location, and animation. See VISION.md for the full mapping table.
 

@@ -203,7 +203,7 @@ export class SessionManager {
     this.statsStore = store;
   }
 
-  registerSession(sessionId: string, filePath: string): ServerAgent {
+  registerSession(sessionId: string, filePath: string, pathParentId?: string): ServerAgent {
     const existing = this.agents.get(sessionId);
     if (existing) {
       existing.lastEventAt = Date.now();
@@ -221,7 +221,12 @@ export class SessionManager {
     const door = tileToWorld(STATIONS.door);
     const name = this.assignName();
 
-    // Check for deterministic hook-based parent linking first
+    // Parent linking priority chain:
+    // 1. Deterministic hook-based linking (SubagentStart hook)
+    // 2. File-path-derived parent (subagent JSONL path contains parent UUID)
+    // 3. Time-window heuristic (Task tool used within last 10s)
+
+    // 1. Check for deterministic hook-based parent linking
     const fileBasename = filePath.replace(/\\/g, '/').split('/').pop()?.replace(/\.jsonl$/, '') ?? '';
     const hookChild = this.hookPendingChildren.get(fileBasename) ?? this.hookPendingChildren.get(sessionId);
     if (hookChild) {
@@ -229,13 +234,35 @@ export class SessionManager {
       this.hookPendingChildren.delete(sessionId);
     }
 
-    // Fall back to time-window heuristic if no hook-based link
-    const pendingSpawn = hookChild
-      ? { parentId: hookChild.parentId, timestamp: Date.now(), childName: hookChild.agentType }
-      : this.matchPendingSpawn();
+    let resolvedParentId: string | null = null;
+    let resolvedChildName: string | null = null;
+
+    if (hookChild) {
+      // Hook-based: most reliable
+      resolvedParentId = hookChild.parentId;
+      resolvedChildName = hookChild.agentType;
+    } else if (pathParentId && this.agents.has(pathParentId)) {
+      // File-path-derived: deterministic, parent UUID is in the subagent JSONL path
+      resolvedParentId = pathParentId;
+      // Consume matching pending spawn for the child name (if any)
+      const spawnIdx = this.pendingSpawns.findIndex(s => s.parentId === pathParentId);
+      if (spawnIdx !== -1) {
+        resolvedChildName = this.pendingSpawns[spawnIdx].childName;
+        this.pendingSpawns.splice(spawnIdx, 1);
+      }
+      // eslint-disable-next-line no-console
+      console.log(`[session-manager] linked subagent ${sessionId.slice(0, 12)}… to parent ${pathParentId.slice(0, 12)}… via file path`);
+    } else {
+      // Fall back to time-window heuristic
+      const pendingSpawn = this.matchPendingSpawn();
+      if (pendingSpawn) {
+        resolvedParentId = pendingSpawn.parentId;
+        resolvedChildName = pendingSpawn.childName;
+      }
+    }
 
     // Reserve desk — prefer adjacent to parent if this is a sub-agent
-    const parentAgent = pendingSpawn?.parentId ? this.agents.get(pendingSpawn.parentId) : null;
+    const parentAgent = resolvedParentId ? this.agents.get(resolvedParentId) : null;
     const deskIndex = this.reserveDesk(sessionId, parentAgent?.deskIndex ?? null);
     const target = deskIndex === null ? door : tileToWorld(STATIONS.desks[deskIndex]);
 
@@ -251,10 +278,10 @@ export class SessionManager {
       stateChangedAt: Date.now(),
       activityText: null,
       name,
-      roleName: pendingSpawn?.childName ?? null,
+      roleName: resolvedChildName,
       project: extractProjectName(filePath),
       waitingForHuman: false,
-      parentId: pendingSpawn?.parentId ?? null,
+      parentId: resolvedParentId,
       childIds: [],
       provider: 'claude',
       machineId: this.localMachineId,
@@ -269,9 +296,8 @@ export class SessionManager {
     this.updateMachineCount(this.localMachineId, 1);
 
     // Link parent to child
-    const parentId = pendingSpawn?.parentId ?? null;
-    if (parentId) {
-      const parent = this.agents.get(parentId);
+    if (resolvedParentId) {
+      const parent = this.agents.get(resolvedParentId);
       if (parent) {
         parent.childIds = [...parent.childIds, sessionId];
       }
