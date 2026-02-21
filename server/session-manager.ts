@@ -66,6 +66,9 @@ function extractProjectName(filePath: string): string | null {
     //    Unix: /home/user/project → -home-user-project
     //    Try each dash (right-to-left) as the project-name boundary,
     //    reconstruct the parent path, and check if it exists on disk.
+    //    We verify the full path (parent + project dir) exists, not just the parent,
+    //    to avoid ambiguity when an intermediate directory also exists
+    //    (e.g. C:\repo\roy exists but the project is C:\repo\roy-final).
     const winDrive = segment.match(/^([A-Za-z])--(.+)$/);
     const rest = winDrive ? winDrive[2] : segment.startsWith('-') ? segment.slice(1) : null;
     const prefix = winDrive ? `${winDrive[1]}:/` : segment.startsWith('-') ? '/' : null;
@@ -74,9 +77,10 @@ function extractProjectName(filePath: string): string | null {
       for (let i = rest.length - 1; i >= 0; i--) {
         if (rest[i] !== '-') continue;
         const parentPart = rest.slice(0, i).replace(/-/g, '/');
+        const projectName = rest.slice(i + 1);
         try {
-          if (existsSync(prefix + parentPart)) {
-            return rest.slice(i + 1);
+          if (existsSync(prefix + parentPart + '/' + projectName)) {
+            return projectName;
           }
         } catch { /* permission error — skip */ }
       }
