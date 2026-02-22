@@ -140,7 +140,8 @@ if (useMock) {
 
   watcher.on('session', ({ sessionId, filePath, agentId, isSubAgent, parentSessionId }) => {
     // eslint-disable-next-line no-console
-    console.log(`[watcher] session ${sessionId} (${filePath})${isSubAgent ? ` [subagent of ${parentSessionId?.slice(0, 12)}…]` : ''}`);
+    const fileName = filePath.split(/[/\\]/).pop() ?? filePath;
+    console.log(`[watcher] session ${sessionId} (${fileName})${isSubAgent ? ` [subagent of ${parentSessionId?.slice(0, 12)}…]` : ''}`);
     sessionManager.registerSession(sessionId, filePath, parentSessionId);
     const started = createSessionEvent(sessionId, 'started', {
       agentId,

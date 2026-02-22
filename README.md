@@ -1,14 +1,15 @@
 # J.O.B.S. — Jarvis Operations & Bot Surveillance
 
 [![CI](https://github.com/maxthomas95/JOBS/actions/workflows/ci.yml/badge.svg)](https://github.com/maxthomas95/JOBS/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ![J.O.B.S. Office](jarvis.png)
 
 A self-hosted, browser-based pixel-art office that visualizes Claude Code agent activity in real-time. Each active coding session spawns a character who moves between stations — coding at a desk, thinking at a whiteboard, running commands at a terminal, searching at a library, grabbing coffee on a break.
 
-Multiple simultaneous sessions = a bustling office.
+Multiple simultaneous sessions = a bustling office. Perfect for developers running multiple Claude Code sessions, team leads monitoring sub-agent trees, or anyone who wants a living dashboard of their AI workforce.
 
-Part of the [Jarvis](https://github.com/maxthomas) AI assistant ecosystem.
+Part of the [Jarvis](https://github.com/maxthomas95/homelab-jarvis) AI assistant ecosystem.
 
 ## Features
 
@@ -273,9 +274,21 @@ src/                    React frontend
     audio/              14 .ogg samples (CC0)
 ```
 
-## Optional: Premium Tileset
+## Tilesets & Custom Maps
 
-The default office uses a procedural renderer (colored rectangles). For detailed pixel art, you can add the [LimeZu Modern Office](https://limezu.itch.io/modernoffice) tileset ($2.50):
+### How rendering works
+
+J.O.B.S. has a three-tier rendering fallback:
+
+1. **Tiled map + tileset images** — if a `.tmj` map and matching PNG sprite sheets are present, the [Tiled Map Editor](https://www.mapeditor.org/) layout renders directly with full detail
+2. **JSON map config + tileset images** — if only the PNGs are present, the built-in JSON map config renders using the sprite sheets
+3. **Procedural fallback** — if no tileset images exist, the office renders as colored rectangles with the same layout and desk positions
+
+The procedural fallback ships by default and works out of the box — no assets to buy, no setup required. Agents, pathfinding, desk assignment, and all features work identically regardless of which renderer is active.
+
+### Adding the LimeZu tileset
+
+For detailed pixel art, you can add the [LimeZu Modern Office](https://limezu.itch.io/modernoffice) tileset ($2.50):
 
 1. Buy and download the tileset from itch.io
 2. Drop the PNG files into `src/assets/tiles/`:
@@ -285,11 +298,68 @@ The default office uses a procedural renderer (colored rectangles). For detailed
 
 The tileset images are gitignored and never committed to the repo.
 
+### Using your own tileset
+
+You can build a completely custom office layout with [Tiled Map Editor](https://www.mapeditor.org/):
+
+1. Create a `.tmj` map (16x16 tile size, 20x15 grid) with your own tileset PNGs
+2. Place the tileset PNGs in `src/assets/tiles/`
+3. Replace the map data in `src/assets/maps/office-tiled.json` with your exported `.tmj`
+4. Update the station positions in `src/engine/PixelOffice.tsx` — the `TILED_STATIONS` object defines where agents sit, think, and walk:
+   - `door` — where agents enter/exit
+   - `desks` — array of `{x, y}` grid positions for agent workstations
+   - `whiteboard`, `terminal`, `library`, `coffee` — shared stations
+
+If your layout has a different desk arrangement, the `TILED_STATIONS.desks` array is what you need to change. The pathfinding grid and walkability are derived automatically from the Tiled map layers (floor = walkable, desk/wall = blocked).
+
 ## Screenshots
 
-| Office Overview | Agent Activity |
+| Busy Office | Full House |
 |---|---|
-| ![Office](preview-2.png) | ![Activity](preview-3.png) |
+| ![Busy Office](preview-4.png) | ![Full House](preview-5.png) |
+
+| HUD & Roster | Agent Sprites |
+|---|---|
+| ![HUD](preview-2.png) | ![Sprites](preview-3.png) |
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, code style, and PR guidelines.
+
+## Roadmap
+
+The full design document lives in [VISION.md](VISION.md). Here's what's ahead.
+
+### Planned Features
+
+Concrete, scoped features planned for future releases:
+
+- **Settings menu** — slide-out panel with per-sound volume sliders, display options, notification preferences
+- **Open-source tileset upgrade** — replace procedural colored rectangles with detailed code-drawn pixel art (zero external assets, zero licensing concerns)
+- **Demo mode** — `?demo=true` URL param or HUD button to showcase the office without real Claude sessions, with auto-demo on idle for public-facing instances
+- **Dashboard / kiosk mode** — full-screen mode optimized for wall-mounted displays, with minimal HUD, auto-rotate agent focus, and auto-hiding cursor
+
+### Moonshots
+
+Big, ambitious features — each would be a marquee addition:
+
+- **Live terminal view** — click a sprite, see its live Claude Code session via xterm.js
+- **Clawdachi sprite system** — expressive, state-aware blob characters with per-state particle effects, facial expressions, and personality palettes
+- **Live room editor** — WYSIWYG drag-and-drop furniture placement with dynamic pathfinding rebuild
+- **Time-lapse replay** — record every event, replay an entire day at high speed with a visual timeline
+- **Multi-tool agent adapters** — purpose-built watchers for Cursor, Windsurf, Aider alongside Claude Code and Codex
+- **Spectator mode** — shareable, read-only links so teammates can watch your office from anywhere
+- **Agent personality system** — persistent traits (speed, anxiety, sociability) that make each agent feel like an individual
+- **AI-generated floor plans** — describe your office in natural language, get a valid map layout
+- **Outbound notifications** — push alerts to Slack, Discord, or any webhook when agents need attention
+
+### The Whiteboard
+
+Ideas that are scoped and ready to build, waiting for community interest or a rainy weekend:
+
+- **Sound packs** — swap between audio themes (office, retro-arcade, nature) or drop in your own
+- **Keyboard shortcuts** — full keyboard control (M mute, T theme, Tab cycle agents, ? help overlay)
+- **Stats export** — CSV and JSON export of session history with date range filtering
 
 ## License
 
