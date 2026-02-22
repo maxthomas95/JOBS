@@ -57,6 +57,24 @@ Milestones v1 (M1-M5) and v2 (M1-M6) are complete. Currently in v2-M7 (Stabiliza
 - **Desk assignment:** First-come-first-served (FIFO), dynamic count from map config (16 main + 1 supervisor with Tiled map)
 - **No socket.io:** Uses native WebSocket client + ws server to avoid overhead
 
+## Git & Publishing Workflow
+
+Two remotes, one branch:
+
+- **`origin`** (Gitea) — primary remote, pushed during normal development
+- **`github`** (GitHub) — public remote, pushed when ready to release
+
+**Day-to-day:** Work on `main`, push to Gitea (`git push origin main`).
+
+**Publishing to GitHub:** When ready for a public release:
+```bash
+git tag v1.x
+git push origin v1.x
+git push github main --tags
+```
+
+Both remotes share the same `main` branch and full history. Tags mark release points.
+
 ## Security (v2-M8)
 
 - **Authentication:** Set `JOBS_TOKEN` env var to enable shared-token auth for WebSocket and `/api/hooks`. Token is auto-injected into the HTML page via `<meta>` tag; browser clients read it automatically. If unset, auth is disabled (zero-config default).
