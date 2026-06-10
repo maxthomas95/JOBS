@@ -68,7 +68,8 @@ app.use((_req, res, next) => {
     "script-src 'self'",
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' blob: data:",
-    "connect-src 'self' ws: wss:",
+    // data: needed because Pixi's Assets loader fetch()es the inline OpenClaw mascot SVG
+    "connect-src 'self' ws: wss: data:",
     "worker-src 'self' blob:",
     "media-src 'self'",
     "object-src 'none'",
