@@ -26,6 +26,7 @@
     "dev:client": "vite --port 5173",
     "dev:server": "tsx watch server/index.ts",
     "dev": "concurrently \"npm:dev:client\" \"npm:dev:server\"",
+    "assets": "node scripts/fetch-assets.mjs",
     "build": "tsc -b && vite build && tsc -p server/tsconfig.json",
     "start": "node dist-server/server/index.js",
     "lint": "eslint .",
