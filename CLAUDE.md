@@ -59,21 +59,38 @@ Milestones v1 (M1-M5) and v2 (M1-M6) are complete. Currently in v2-M7 (Stabiliza
 
 ## Git & Publishing Workflow
 
-Two remotes, one branch:
+**GitHub is the single source of truth** — one remote (`github` → `maxthomas95/JOBS`), one long-lived branch (`main`). The old Gitea remote is retired.
 
-- **`origin`** (Gitea) — primary remote, pushed during normal development
-- **`github`** (GitHub) — public remote, pushed when ready to release
+**`main` is protected** — never commit or push directly to it. All changes go through branch + PR + squash merge (linear history; CI checks `lint`, `build`, and `npm audit` must pass).
 
-**Day-to-day:** Work on `main`, push to Gitea (`git push origin main`).
+### Worktree and branch policy
 
-**Publishing to GitHub:** When ready for a public release:
+- **Never work directly on `main`** — always create a feature branch (e.g. `feat/follow-mode`, `fix/desk-assignment`, `docs/readme-polish`).
+- **Prefer separate worktrees** (`git worktree add`) for substantial tasks — multiple agent sessions may be active simultaneously.
+- **Stage only relevant files** — do not disturb unrelated uncommitted changes.
+
+### PR process
+
+1. **Branch:** create a feature branch from `main`.
+2. **Push:** `git push github HEAD:refs/heads/<branch-name>`.
+3. **Create PR:** against `main` with a body containing:
+   - `## Summary` — user-visible behavior and any privacy/security boundary impacts.
+   - `## Test plan` — checkboxes with commands actually run.
+   - `## Out of scope` — deliberately deferred follow-up work.
+4. **Squash merge:** use explicit `--subject` and `--body` to produce a single clean commit.
+
+### Commit messages
+
+Conventional commit prefixes for subject lines: `feat:`, `fix(scope):`, `docs:`, `chore:`, etc. Keep subjects to one line; write a detailed body covering what changed and why.
+
+### Releases
+
 ```bash
 git tag v1.x
-git push origin v1.x
-git push github main --tags
+git push github v1.x
 ```
 
-Both remotes share the same `main` branch and full history. Tags mark release points.
+Tags mark release points.
 
 ## Security (v2-M8)
 
