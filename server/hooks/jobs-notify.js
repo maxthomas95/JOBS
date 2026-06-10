@@ -6,6 +6,7 @@
 const { hostname } = require('os');
 
 const JOBS_URL = process.env.JOBS_URL || 'http://localhost:8780';
+const JOBS_TOKEN = process.env.JOBS_TOKEN || '';
 const MACHINE_ID = process.env.MACHINE_ID || hostname();
 const MACHINE_NAME = process.env.MACHINE_NAME || MACHINE_ID;
 
@@ -33,9 +34,14 @@ async function main() {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 5000);
 
+    const headers = { 'Content-Type': 'application/json' };
+    if (JOBS_TOKEN) {
+      headers.Authorization = `Bearer ${JOBS_TOKEN}`;
+    }
+
     await fetch(`${JOBS_URL}/api/hooks`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: typeof body === 'string' ? body : JSON.stringify(body),
       signal: controller.signal,
     });

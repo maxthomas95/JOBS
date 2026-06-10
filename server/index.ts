@@ -29,7 +29,25 @@ function extractParentFromPath(filePath: string): string | undefined {
   return undefined;
 }
 
+/** Read the app version from package.json. Tries the repo root relative to this
+ *  file (dev: server/, compiled: dist-server/server/), then the working directory. */
+function readAppVersion(): string {
+  const candidates = [
+    join(import.meta.dirname, '..', 'package.json'),
+    join(import.meta.dirname, '..', '..', 'package.json'),
+    join(process.cwd(), 'package.json'),
+  ];
+  for (const candidate of candidates) {
+    try {
+      const pkg = JSON.parse(readFileSync(candidate, 'utf-8')) as { name?: string; version?: string };
+      if (pkg.name === 'jobs' && pkg.version) return pkg.version;
+    } catch { /* try next candidate */ }
+  }
+  return '0.0.0';
+}
+
 const app = express();
+const appVersion = readAppVersion();
 const port = Number(process.env.PORT ?? 8780);
 const rawClaudeDir = process.env.CLAUDE_DIR ?? join(homedir(), '.claude');
 const claudeDir = rawClaudeDir.startsWith('~')
@@ -88,8 +106,9 @@ if (jobsToken) {
 const apiLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 120 });
 const healthLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 30 });
 
+// Identifies this service to integrations (e.g. Tether auto-detection) — keep `app: 'jobs'` stable.
 app.get('/healthz', healthLimiter, (_req, res) => {
-  res.json({ ok: true });
+  res.json({ ok: true, app: 'jobs', version: appVersion });
 });
 
 const server = http.createServer(app);

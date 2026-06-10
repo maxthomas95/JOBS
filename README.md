@@ -173,6 +173,9 @@ J.O.B.S. is designed to be safe for network exposure.
 - WebSocket connections require `?token=<value>` in the URL
 - `POST /api/hooks` requires `Authorization: Bearer <token>` header
 - Browser clients get the token auto-injected via `<meta>` tag — no manual config needed
+- The hook notify scripts (`jobs-notify.js`/`.sh`) send the header automatically when `JOBS_TOKEN` is set in your shell environment
+
+**Service identity:** `GET /healthz` returns `{ ok, app: "jobs", version }` so integrations (e.g. Tether) can positively identify a running JOBS instance.
 
 Without `JOBS_TOKEN`, everything works open (zero-config default for local use).
 
