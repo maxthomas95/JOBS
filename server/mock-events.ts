@@ -255,9 +255,13 @@ export class WebhookMockGenerator {
         () => createToolEvent(this.claudeId, this.claudeId, Date.now(), { tool: 'Bash', status: 'started', context: 'npm test' }),
         () => createToolEvent(this.claudeId, this.claudeId, Date.now(), { tool: 'Bash', status: 'completed' }),
       ];
-      const claudeEvent = claudeSteps[(this.cursor - 5) % claudeSteps.length]();
-      sessionManager.handleEvent(claudeEvent);
-      wsServer.broadcast(claudeEvent);
+      // Claude only starts cycling after both webhook agents are registered
+      // (a negative index here crashed the generator on its first ticks)
+      if (this.cursor >= 5) {
+        const claudeEvent = claudeSteps[(this.cursor - 5) % claudeSteps.length]();
+        sessionManager.handleEvent(claudeEvent);
+        wsServer.broadcast(claudeEvent);
+      }
 
       // Cycle CI through states
       if (this.ciRegistered && this.cursor % 3 === 0) {

@@ -7,6 +7,7 @@ import { findPath } from './Pathfinder.js';
 import { useOfficeStore } from '../state/useOfficeStore.js';
 import claudeGifUrl from '../assets/claude.gif';
 import openclawSvgUrl from '../assets/openclaw-mascot.svg';
+import codexPngUrl from '../assets/codex.png';
 
 /** Current sprite positions in world coordinates, updated every frame. Used by HTML bubble overlay. */
 export const spritePositions = new Map<string, Point>();
@@ -30,6 +31,9 @@ const PACE_AREA = { minX: 7, maxX: 11, minY: 7, maxY: 9 }; // mid-office tile ra
 
 const SPRITE_SIZE = 32;
 const OPENCLAW_SPRITE_SIZE = 24;
+// claude.gif has ~35% transparent padding in its frame; the codex texture is cropped
+// edge-to-edge, so it renders smaller than its nominal size to visually match.
+const CODEX_SPRITE_SIZE = 20;
 
 /** Check if an agent comes from an OpenClaw webhook source. */
 function isOpenClawAgent(agent: Agent): boolean {
@@ -37,6 +41,11 @@ function isOpenClawAgent(agent: Agent): boolean {
   const name = (agent.machineName ?? '').toLowerCase();
   const source = (agent.sourceName ?? '').toLowerCase();
   return name.includes('openclaw') || source.includes('openclaw');
+}
+
+/** Check if an agent is an OpenAI Codex session (set by the webhook receiver for source_type 'codex'). */
+function isCodexAgent(agent: Agent): boolean {
+  return agent.provider === 'codex' || agent.sourceType === 'codex';
 }
 
 /** Safe wrappers — AnimatedGIF has play/stop/playing, plain Sprite does not. */
@@ -84,6 +93,7 @@ export class AgentSpriteManager {
   private readonly sprites = new Map<string, AgentVisual>();
   private gifTemplate: AnimatedGIF | null = null;
   private openclawTexture: Texture | null = null;
+  private codexTexture: Texture | null = null;
 
   constructor(private readonly container: Container) {}
 
@@ -101,6 +111,14 @@ export class AgentSpriteManager {
       // eslint-disable-next-line no-console
       console.error('[sprites] failed to load openclaw-mascot.svg:', (error as Error).message);
     }
+    try {
+      const texture = await Assets.load(codexPngUrl) as Texture;
+      texture.source.scaleMode = 'nearest'; // keep pixel art crisp when scaled down
+      this.codexTexture = texture;
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('[sprites] failed to load codex.png:', (error as Error).message);
+    }
   }
 
   addAgent(agent: Agent): void {
@@ -108,7 +126,13 @@ export class AgentSpriteManager {
 
     let sprite: Sprite;
     let baseSize: number;
-    if (isOpenClawAgent(agent) && this.openclawTexture) {
+    if (isCodexAgent(agent) && this.codexTexture) {
+      sprite = new Sprite(this.codexTexture);
+      baseSize = CODEX_SPRITE_SIZE;
+      sprite.anchor.set(0.5, 0.75);
+      sprite.width = baseSize;
+      sprite.height = baseSize;
+    } else if (isOpenClawAgent(agent) && this.openclawTexture) {
       sprite = new Sprite(this.openclawTexture);
       baseSize = OPENCLAW_SPRITE_SIZE;
       sprite.anchor.set(0.5, 0.75);
