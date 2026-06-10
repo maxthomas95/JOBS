@@ -301,6 +301,8 @@ For detailed pixel art, you can add the [LimeZu Modern Office](https://limezu.it
 
 The tileset images are gitignored and never committed to the repo.
 
+**Syncing purchased tiles across your own machines:** the license forbids redistributing the assets, so keep them in a *private* GitHub repo and run `npm run assets` (requires an authenticated [GitHub CLI](https://cli.github.com/)) to pull them into `src/assets/tiles/` on each machine. Set `JOBS_ASSETS_REPO=owner/name` to point at your own private repo. Remember to `npm run build` afterward so production builds include them.
+
 ### Using your own tileset
 
 You can build a completely custom office layout with [Tiled Map Editor](https://www.mapeditor.org/):
