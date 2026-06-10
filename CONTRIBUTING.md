@@ -32,6 +32,8 @@ MOCK_EVENTS=supervisor npm run dev:server  # Team scenarios
    ```
 4. Open a pull request with a clear description
 
+CI runs `lint`, `build` (with type check), and `npm audit` on every PR — all three must pass. PRs are squash-merged, so use a conventional commit subject (`feat:`, `fix:`, `docs:`, etc.) for the PR title.
+
 ## Code Style
 
 - **TypeScript strict mode** — no `any` unless absolutely necessary

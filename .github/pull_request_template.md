@@ -1,17 +1,17 @@
 ## Summary
 
-Brief description of changes.
+- 
 
-## Changes
-
--
-
-## Test Plan
+## Test plan
 
 - [ ] `npm run lint` passes
-- [ ] `npx tsc --noEmit` passes
-- [ ] `npm run build` succeeds
-- [ ] Tested with `MOCK_EVENTS=true`
+- [ ] `npm run build` succeeds (includes type check)
+- [ ] Tested with `MOCK_EVENTS=true` (if visual/behavior change)
+- [ ] Not run - explain why:
+
+## Out of scope
+
+- 
 
 ## Screenshots
 
