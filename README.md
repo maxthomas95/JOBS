@@ -25,7 +25,7 @@ Part of the [Jarvis](https://github.com/maxthomas95/homelab-jarvis) AI assistant
 - **Stats dashboard** — sessions today, total hours, files touched, tools used breakdown
 - **Webhook adapter** — accept events from any source (CI, deploy, monitoring) via HTTP POST
 - **Multi-instance** — watch multiple machines' Claude dirs, with machine grouping in the HUD
-- **OpenAI Codex support** — visualize Codex CLI sessions alongside Claude Code
+- **OpenAI Codex support** — visualize Codex CLI sessions alongside Claude Code, with their own robot mascot
 - **Privacy first** — no code, file contents, or full paths ever leave the server
 
 ## How It Works

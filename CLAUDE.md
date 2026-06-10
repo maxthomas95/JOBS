@@ -53,7 +53,7 @@ Milestones v1 (M1-M5) and v2 (M1-M6) are complete. Currently in v2-M7 (Stabiliza
 - **Privacy first:** The claude-adapter must strip all sensitive content (code, full file paths, bash commands, thinking/responses) before broadcasting
 - **Bridge extraction:** Core file-watching modules come from pixelhq-bridge (MIT) — extract only watcher, parser, adapter, events (~4 files), skip iOS-specific code
 - **Single container:** Both static frontend and WebSocket server run in one Docker container
-- **Sprites:** Clawdachi GIF blob via @pixi/gif (clone-per-agent), with 32x32folk.png fallback
+- **Sprites:** Clawdachi GIF blob via @pixi/gif (clone-per-agent), with 32x32folk.png fallback. OpenClaw and Codex agents get dedicated mascot textures, selected per-agent in `AgentSprite.ts` (Codex: `provider === 'codex'`)
 - **Desk assignment:** First-come-first-served (FIFO), dynamic count from map config (16 main + 1 supervisor with Tiled map)
 - **No socket.io:** Uses native WebSocket client + ws server to avoid overhead
 
