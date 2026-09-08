@@ -1,3 +1,7 @@
+import { OFFICE_LAYOUT, type OfficeStations } from './office-layout.js';
+
+export type IntegrationMode = 'transcript' | 'hooks' | 'notify' | 'webhook';
+
 export type AgentState =
   | 'entering'
   | 'coding'
@@ -28,6 +32,10 @@ export interface Agent {
   targetPosition: Point | null;
   deskIndex: number | null;
   lastEventAt: number;
+  /** Server-observed start of this active session segment. */
+  startedAt?: number;
+  integrationMode?: IntegrationMode;
+  model?: string;
   /** Timestamp when the current state was entered */
   stateChangedAt: number;
   /** Short text describing current activity (e.g. "auth.ts", "running tests") */
@@ -60,49 +68,8 @@ export interface Agent {
 
 export const TILE_SIZE = 16;
 
-/** Station positions — mutable so they can be updated from map config at startup. */
-export const STATIONS: {
-  door: Point;
-  whiteboard: Point;
-  terminal: Point;
-  library: Point;
-  coffee: Point;
-  desks: Point[];
-} = {
-  door: { x: 18, y: 13 },
-  whiteboard: { x: 9, y: 2 },
-  terminal: { x: 13, y: 12 },
-  library: { x: 2, y: 3 },
-  coffee: { x: 16, y: 12 },
-  desks: [
-    { x: 4, y: 6 },
-    { x: 8, y: 6 },
-    { x: 12, y: 6 },
-    { x: 4, y: 9 },
-    { x: 8, y: 9 },
-    { x: 12, y: 9 },
-  ],
-};
-
-/**
- * Update STATIONS from a map config's station positions.
- * Called at startup from PixelOffice before any rendering.
- */
-export function setStationsFromConfig(stations: {
-  door: Point;
-  whiteboard: Point;
-  terminal: Point;
-  library: Point;
-  coffee: Point;
-  desks: Point[];
-}): void {
-  STATIONS.door = stations.door;
-  STATIONS.whiteboard = stations.whiteboard;
-  STATIONS.terminal = stations.terminal;
-  STATIONS.library = stations.library;
-  STATIONS.coffee = stations.coffee;
-  STATIONS.desks = [...stations.desks];
-}
+/** Canonical geometry shared by the server, Tiled art, and fallback renderer. */
+export const STATIONS: OfficeStations = OFFICE_LAYOUT.stations;
 
 export function tileToWorld(point: Point): Point {
   return {

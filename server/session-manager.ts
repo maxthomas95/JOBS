@@ -1,6 +1,6 @@
 import { hostname } from 'node:os';
 import { existsSync } from 'node:fs';
-import type { Agent, AgentState } from '../src/types/agent.js';
+import type { Agent, AgentState, IntegrationMode } from '../src/types/agent.js';
 import type { MachineInfo, PixelEvent } from '../src/types/events.js';
 import { STATIONS, tileToWorld } from '../src/types/agent.js';
 import { createActivityEvent, createSessionEvent } from './bridge/pixel-events.js';
@@ -144,6 +144,11 @@ interface ArchivedAgent {
   machineId: string | null;
   machineName: string | null;
   archivedAt: number;
+  integrationMode?: IntegrationMode;
+  model?: string;
+  sourceType: string | null;
+  sourceName: string | null;
+  sourceUrl: string | null;
 }
 
 /** Tracks an agent that recently used the Task tool and may spawn a child */
@@ -175,6 +180,9 @@ export class SessionManager {
   private readonly machines = new Map<string, MachineInfo>();
   private readonly localMachineId: string;
   private readonly localMachineName: string;
+  private readonly removalTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private readonly intervals: ReturnType<typeof setInterval>[] = [];
+  private readonly seenEvents = new Set<string>();
 
   constructor(
     staleIdleMs = Number(process.env.STALE_IDLE_MS ?? 60000),
@@ -210,7 +218,9 @@ export class SessionManager {
   registerSession(sessionId: string, filePath: string, pathParentId?: string): ServerAgent {
     const existing = this.agents.get(sessionId);
     if (existing) {
+      this.resumeAgent(existing);
       existing.lastEventAt = Date.now();
+      this.statsStore?.recordSessionActivity(existing.id, existing.lastEventAt);
       existing.filePath = filePath;
       return existing;
     }
@@ -279,6 +289,8 @@ export class SessionManager {
       targetPosition: target,
       deskIndex,
       lastEventAt: Date.now(),
+      startedAt: Date.now(),
+      integrationMode: 'transcript',
       stateChangedAt: Date.now(),
       activityText: null,
       name,
@@ -309,7 +321,8 @@ export class SessionManager {
 
     this.nextCharacterIndex += 1;
     this.agents.set(sessionId, agent);
-    this.statsStore?.recordSessionStart(sessionId, name, agent.project);
+    this.statsStore?.recordSessionStart(sessionId, name, agent.project, agent.startedAt);
+    this.linkChildren(agent);
     return agent;
   }
 
@@ -323,11 +336,18 @@ export class SessionManager {
       return;
     }
 
-    agent.lastEventAt = event.timestamp || Date.now();
+    if (this.seenEvents.has(event.id)) return;
+    this.seenEvents.add(event.id);
+    if (this.seenEvents.size > 4000) this.seenEvents.delete(this.seenEvents.values().next().value!);
+
+    if (!(event.type === 'session' && event.action === 'ended')) this.resumeAgent(agent);
+
+    agent.lastEventAt = Math.max(agent.lastEventAt, event.timestamp || Date.now());
+    this.statsStore?.recordSessionActivity(agent.id, agent.lastEventAt);
 
     // When hooks have deterministically set waiting state, ignore stale JSONL events
     // from the same turn. Only user_prompt (new human message) or session events can wake up.
-    if (agent.hookActive && agent.waitingForHuman) {
+    if (agent.hookActive && agent.state === 'waiting' && agent.waitingForHuman) {
       if (event.type === 'activity' && event.action === 'user_prompt') {
         // New human message — wake up and proceed
         agent.waitingForHuman = false;
@@ -358,7 +378,10 @@ export class SessionManager {
         event.roleName = agent.roleName ?? undefined;
         event.project = agent.project ?? undefined;
         event.parentId = agent.parentId ?? undefined;
-        this.applyState(agent, 'entering', agent.deskIndex === null ? STATIONS.door : STATIONS.desks[agent.deskIndex], null);
+        event.startedAt = agent.startedAt;
+        event.provider = agent.provider;
+        event.integrationMode = agent.integrationMode;
+        event.model = agent.model;
         // Broadcast snapshot so all clients get parent's updated childIds
         if (agent.parentId && this.onSnapshotNeeded) {
           this.onSnapshotNeeded();
@@ -368,20 +391,9 @@ export class SessionManager {
         const wasArchived = this.archivedAgents.get(sessionId);
         if (wasArchived) {
           this.archivedAgents.delete(sessionId);
-          // Name was held by archive — release it now
-          if (wasArchived.name) {
-            this.assignedNames.delete(wasArchived.name);
-          }
+          this.cancelRemoval(sessionId);
         }
-        this.statsStore?.recordSessionEnd(sessionId, {});
-        this.applyState(agent, 'leaving', STATIONS.door, null);
-        this.releaseDesk(sessionId);
-        setTimeout(() => {
-          if (agent.name) {
-            this.assignedNames.delete(agent.name);
-          }
-          this.agents.delete(sessionId);
-        }, 2000);
+        this.scheduleRemoval(agent, false, 2000);
       }
       return;
     }
@@ -401,6 +413,12 @@ export class SessionManager {
         // Transition to thinking since the JSONL won't write the thinking
         // block until thinking finishes (could be 10-30s of no events).
         this.applyState(agent, 'thinking', STATIONS.whiteboard, 'Processing...');
+      } else if (event.action === 'needsApproval') {
+        this.applyState(agent, 'needsApproval', STATIONS.coffee, 'Needs approval');
+        agent.waitingForHuman = true;
+        agent.waitingSince = Date.now();
+      } else if (event.action === 'compacting') {
+        this.applyState(agent, 'compacting', STATIONS.library, 'Compacting memory...');
       }
       return;
     }
@@ -454,9 +472,13 @@ export class SessionManager {
     if (hookEventName === 'Stop') {
       const agent = this.agents.get(sessionId);
       if (agent) {
+        this.resumeAgent(agent);
         agent.waitingForHuman = true;
         agent.waitingSince = Date.now();
         agent.hookActive = true;
+        agent.integrationMode = 'hooks';
+        agent.lastEventAt = Date.now();
+        this.statsStore?.recordSessionActivity(agent.id, agent.lastEventAt);
         this.applyState(agent, 'waiting', STATIONS.coffee, 'Waiting...');
         return createActivityEvent(sessionId, sessionId, Date.now(), 'waiting');
       }
@@ -490,6 +512,9 @@ export class SessionManager {
         const agent = this.agents.get(sessionId);
         if (agent) {
           agent.hookActive = true;
+          agent.integrationMode = 'hooks';
+          agent.waitingForHuman = true;
+          agent.waitingSince = Date.now();
           this.applyState(agent, 'needsApproval' as AgentState, STATIONS.coffee, 'Needs approval');
           return createActivityEvent(sessionId, sessionId, Date.now(), 'needsApproval' as 'waiting');
         }
@@ -568,9 +593,11 @@ export class SessionManager {
   }
 
   removeSession(sessionId: string): void {
+    this.cancelRemoval(sessionId);
+    this.statsStore?.recordSessionEnd(sessionId, {});
     const agent = this.agents.get(sessionId);
     if (agent) {
-      if (agent.name) {
+      if (agent.name && !agent.sourceName) {
         this.assignedNames.delete(agent.name);
       }
       if (agent.machineId) {
@@ -579,10 +606,12 @@ export class SessionManager {
     }
     this.releaseDesk(sessionId);
     this.agents.delete(sessionId);
+    this.unlinkChild(sessionId);
   }
 
   /** Remove an agent after stale eviction — name stays reserved via the archive */
   private evictSession(sessionId: string): void {
+    this.cancelRemoval(sessionId);
     const agent = this.agents.get(sessionId);
     if (agent) {
       // Don't release the name — it's held by the archive entry
@@ -592,13 +621,36 @@ export class SessionManager {
     }
     this.releaseDesk(sessionId);
     this.agents.delete(sessionId);
+    this.unlinkChild(sessionId);
   }
 
   getSnapshot(): Agent[] {
     return Array.from(this.agents.values()).map((agent) => ({
-      ...agent,
-      position: { ...agent.position },
-      targetPosition: agent.targetPosition ? { ...agent.targetPosition } : null,
+      id: agent.id,
+      sessionId: agent.sessionId,
+      characterIndex: agent.characterIndex,
+      state: agent.state,
+      position: { x: agent.position.x, y: agent.position.y },
+      targetPosition: agent.targetPosition ? { x: agent.targetPosition.x, y: agent.targetPosition.y } : null,
+      deskIndex: agent.deskIndex,
+      lastEventAt: agent.lastEventAt,
+      startedAt: agent.startedAt,
+      stateChangedAt: agent.stateChangedAt,
+      activityText: agent.activityText,
+      name: agent.name,
+      roleName: agent.roleName,
+      project: agent.project,
+      waitingForHuman: agent.waitingForHuman,
+      parentId: agent.parentId,
+      childIds: [...agent.childIds],
+      provider: agent.provider,
+      integrationMode: agent.integrationMode,
+      model: agent.model,
+      machineId: agent.machineId,
+      machineName: agent.machineName,
+      sourceType: agent.sourceType,
+      sourceName: agent.sourceName,
+      sourceUrl: agent.sourceUrl,
     }));
   }
 
@@ -614,11 +666,31 @@ export class SessionManager {
     state?: string;
     activity?: string;
     url?: string;
+    provider?: string;
+    integrationMode?: IntegrationMode;
+    model?: string;
+    parentId?: string;
+    startedAt?: number;
   }): ServerAgent {
     const agentId = `wh:${sourceId}`;
-    const existing = this.agents.get(agentId);
+    let existing = this.agents.get(agentId);
+    const archived = this.archivedAgents.get(agentId);
+    if (!existing && archived) {
+      this.archivedAgents.delete(agentId);
+      existing = this.restoreFromArchive(agentId, '', archived);
+    }
     if (existing) {
+      this.resumeAgent(existing);
       existing.lastEventAt = Date.now();
+      this.statsStore?.recordSessionActivity(existing.id, existing.lastEventAt);
+      if (opts.project !== undefined) existing.project = opts.project;
+      if (opts.activity !== undefined) existing.activityText = opts.activity;
+      if (opts.url !== undefined) existing.sourceUrl = opts.url;
+      if (opts.integrationMode) existing.integrationMode = opts.integrationMode;
+      if (opts.model) existing.model = opts.model;
+      if (opts.parentId && opts.parentId !== agentId) existing.parentId = opts.parentId;
+      if (opts.state) this.applyWebhookState(existing, opts.state);
+      this.linkChildren(existing);
       return existing;
     }
 
@@ -630,7 +702,7 @@ export class SessionManager {
     const mId = opts.machine ?? this.localMachineId;
     this.ensureMachine(mId);
 
-    const provider = opts.sourceType === 'codex' ? 'codex' : 'webhook';
+    const provider = opts.provider ?? (opts.sourceType === 'codex' ? 'codex' : 'webhook');
 
     const agent: ServerAgent = {
       id: agentId,
@@ -641,13 +713,16 @@ export class SessionManager {
       targetPosition: target,
       deskIndex,
       lastEventAt: Date.now(),
+      startedAt: opts.startedAt ?? Date.now(),
+      integrationMode: opts.integrationMode ?? (provider === 'codex' ? 'notify' : 'webhook'),
+      model: opts.model,
       stateChangedAt: Date.now(),
       activityText: opts.activity ?? null,
       name,
       roleName: null,
       project: opts.project ?? null,
       waitingForHuman: false,
-      parentId: null,
+      parentId: opts.parentId === agentId ? null : opts.parentId ?? null,
       childIds: [],
       provider,
       machineId: mId,
@@ -660,7 +735,8 @@ export class SessionManager {
     this.nextCharacterIndex += 1;
     this.agents.set(agentId, agent);
     this.updateMachineCount(mId, 1);
-    this.statsStore?.recordSessionStart(agentId, name, agent.project);
+    this.statsStore?.recordSessionStart(agentId, name, agent.project, agent.startedAt);
+    this.linkChildren(agent);
 
     // Apply initial state if provided
     if (opts.state) {
@@ -674,7 +750,9 @@ export class SessionManager {
     const agent = this.agents.get(agentId);
     if (!agent) return null;
 
+    this.resumeAgent(agent);
     agent.lastEventAt = Date.now();
+    this.statsStore?.recordSessionActivity(agent.id, agent.lastEventAt);
     if (activity !== null) agent.activityText = activity;
     if (url !== null) agent.sourceUrl = url;
     if (state !== null) this.applyWebhookState(agent, state);
@@ -686,24 +764,7 @@ export class SessionManager {
     const agent = this.agents.get(agentId);
     if (!agent) return false;
 
-    this.applyState(agent, 'leaving', STATIONS.door, null);
-    this.releaseDesk(agentId);
-    this.statsStore?.recordSessionEnd(agentId, {});
-
-    setTimeout(() => {
-      const a = this.agents.get(agentId);
-      if (a) {
-        if (a.name && !a.sourceName) {
-          // Only release pool name if it came from the pool (not from sourceName)
-          this.assignedNames.delete(a.name);
-        }
-        if (a.machineId) {
-          this.updateMachineCount(a.machineId, -1);
-        }
-        this.agents.delete(agentId);
-        if (this.onSnapshotNeeded) this.onSnapshotNeeded();
-      }
-    }, 2000);
+    this.scheduleRemoval(agent, false, 2000);
 
     return true;
   }
@@ -712,10 +773,13 @@ export class SessionManager {
     const agent = this.agents.get(agentId);
     if (!agent) return false;
     agent.lastEventAt = Date.now();
+    this.statsStore?.recordSessionActivity(agent.id, agent.lastEventAt);
     return true;
   }
 
   private applyWebhookState(agent: ServerAgent, webhookState: string): void {
+    agent.waitingForHuman = webhookState === 'waiting';
+    agent.waitingSince = agent.waitingForHuman ? Date.now() : undefined;
     const mapping = WEBHOOK_STATE_MAP[webhookState];
     if (!mapping) {
       // eslint-disable-next-line no-console
@@ -791,10 +855,67 @@ export class SessionManager {
   }
 
   private applyState(agent: ServerAgent, state: AgentState, target: { x: number; y: number }, activityText: string | null): void {
+    if (agent.state !== state) agent.stateChangedAt = Date.now();
     agent.state = state;
     agent.targetPosition = tileToWorld(target);
-    agent.stateChangedAt = Date.now();
     agent.activityText = activityText;
+  }
+
+  private cancelRemoval(sessionId: string): void {
+    const timer = this.removalTimers.get(sessionId);
+    if (timer) clearTimeout(timer);
+    this.removalTimers.delete(sessionId);
+  }
+
+  private resumeAgent(agent: ServerAgent): void {
+    this.cancelRemoval(agent.id);
+    if (agent.state !== 'leaving') return;
+    this.archivedAgents.delete(agent.id);
+    agent.startedAt = Date.now();
+    agent.waitingForHuman = false;
+    agent.waitingSince = undefined;
+    this.applyState(agent, 'entering', agent.deskIndex === null ? STATIONS.door : STATIONS.desks[agent.deskIndex], null);
+    this.statsStore?.recordSessionStart(agent.id, agent.name ?? '', agent.project, agent.startedAt);
+  }
+
+  private scheduleRemoval(agent: ServerAgent, archive: boolean, delayMs: number): void {
+    if (this.removalTimers.has(agent.id)) return;
+    if (archive) this.archiveAgent(agent.id, agent);
+    this.statsStore?.recordSessionEnd(agent.id, {}, archive ? agent.lastEventAt : Date.now());
+    agent.waitingForHuman = false;
+    agent.waitingSince = undefined;
+    this.applyState(agent, 'leaving', STATIONS.door, null);
+    // Keep the desk reserved through the leaving animation; a resumed session
+    // cannot share a desk that has already been reassigned to somebody else.
+    const timer = setTimeout(() => {
+      if (this.removalTimers.get(agent.id) !== timer || this.agents.get(agent.id) !== agent || agent.state !== 'leaving') return;
+      this.removalTimers.delete(agent.id);
+      if (archive) this.evictSession(agent.id);
+      else this.removeSession(agent.id);
+      this.onSnapshotNeeded?.();
+    }, delayMs);
+    timer.unref();
+    this.removalTimers.set(agent.id, timer);
+  }
+
+  private linkChildren(agent: ServerAgent): void {
+    if (agent.parentId) {
+      const parent = this.agents.get(agent.parentId);
+      if (parent && !parent.childIds.includes(agent.id)) parent.childIds.push(agent.id);
+    }
+    for (const child of this.agents.values()) {
+      if (child.parentId === agent.id && !agent.childIds.includes(child.id)) agent.childIds.push(child.id);
+    }
+  }
+
+  private unlinkChild(sessionId: string): void {
+    for (const agent of this.agents.values()) agent.childIds = agent.childIds.filter(id => id !== sessionId);
+  }
+
+  dispose(): void {
+    for (const timer of this.intervals) clearInterval(timer);
+    for (const timer of this.removalTimers.values()) clearTimeout(timer);
+    this.removalTimers.clear();
   }
 
   private reserveDesk(sessionId: string, parentDeskIndex: number | null): number | null {
@@ -863,6 +984,11 @@ export class SessionManager {
       machineId: agent.machineId,
       machineName: agent.machineName,
       archivedAt: Date.now(),
+      integrationMode: agent.integrationMode,
+      model: agent.model,
+      sourceType: agent.sourceType,
+      sourceName: agent.sourceName,
+      sourceUrl: agent.sourceUrl,
     });
     // Keep the name reserved so nobody else takes it
     // (assignedNames.delete is NOT called here — only on true session end)
@@ -895,6 +1021,9 @@ export class SessionManager {
       targetPosition: target,
       deskIndex,
       lastEventAt: Date.now(),
+      startedAt: Date.now(),
+      integrationMode: archived.integrationMode,
+      model: archived.model,
       stateChangedAt: Date.now(),
       activityText: null,
       name: archived.name,
@@ -906,9 +1035,9 @@ export class SessionManager {
       provider: archived.provider,
       machineId: archived.machineId ?? this.localMachineId,
       machineName: archived.machineName ?? this.localMachineName,
-      sourceType: null,
-      sourceName: null,
-      sourceUrl: null,
+      sourceType: archived.sourceType,
+      sourceName: archived.sourceName,
+      sourceUrl: archived.sourceUrl,
       filePath,
     };
 
@@ -924,135 +1053,105 @@ export class SessionManager {
 
     // Don't increment nextCharacterIndex — reusing archived value
     this.agents.set(sessionId, agent);
-    // Don't call statsStore.recordSessionStart — the old stats record is still open
+    this.statsStore?.recordSessionStart(sessionId, agent.name ?? '', agent.project, agent.startedAt);
     // eslint-disable-next-line no-console
     console.log(`[session-manager] restored archived agent ${sessionId} as "${archived.name}"`);
     return agent;
   }
 
   private startGhostTimer(): void {
-    setInterval(() => {
-      const now = Date.now();
-      let changed = false;
+    this.intervals.push(setInterval(() => this.sweepStaleSessions(), 10000).unref());
+  }
 
-      // Clean up expired archive entries
-      for (const [sid, arch] of this.archivedAgents.entries()) {
-        if (now - arch.archivedAt > this.archiveTtlMs) {
-          this.archivedAgents.delete(sid);
-          // Release the held name now that the archive has expired
-          if (arch.name) {
-            this.assignedNames.delete(arch.name);
-          }
+  private sweepStaleSessions(): void {
+    const now = Date.now();
+    let changed = false;
+
+    // Clean up expired archive entries
+    for (const [sid, arch] of this.archivedAgents.entries()) {
+      if (now - arch.archivedAt > this.archiveTtlMs) {
+        this.archivedAgents.delete(sid);
+        // Release the held name now that the archive has expired
+        if (arch.name && !arch.sourceName) {
+          this.assignedNames.delete(arch.name);
         }
       }
+    }
 
-      // Clean up stale hookPendingChildren entries (older than spawnWindowMs)
-      for (const [key, entry] of this.hookPendingChildren.entries()) {
-        if (now - entry.timestamp > this.spawnWindowMs) {
-          this.hookPendingChildren.delete(key);
-        }
+    // Clean up stale hookPendingChildren entries (older than spawnWindowMs)
+    for (const [key, entry] of this.hookPendingChildren.entries()) {
+      if (now - entry.timestamp > this.spawnWindowMs) {
+        this.hookPendingChildren.delete(key);
       }
+    }
 
-      // Clean up stale tool name cache entries
-      cleanToolNameCache();
+    // Clean up stale tool name cache entries
+    cleanToolNameCache();
 
-      for (const [sessionId, agent] of this.agents.entries()) {
-        const age = now - agent.lastEventAt;
-        if (age > this.staleEvictMs && agent.state !== 'leaving') {
-          // Archive before eviction so the agent can be restored
-          this.archiveAgent(sessionId, agent);
-          agent.state = 'leaving';
-          agent.targetPosition = tileToWorld(STATIONS.door);
-          agent.stateChangedAt = now;
-          changed = true;
-          // Delay removal to allow leaving animation on client
-          setTimeout(() => {
-            const current = this.agents.get(sessionId);
-            if (current && current.state === 'leaving') {
-              this.evictSession(sessionId);
-              if (this.onSnapshotNeeded) this.onSnapshotNeeded();
-            }
-          }, 3000);
-        } else if (agent.state === 'entering' && now - agent.stateChangedAt > this.enteringTimeoutMs) {
-          // 'entering' is a transient state (~2s walk). If stuck longer than 30s,
-          // the session was likely picked up on startup with no real activity.
-          agent.state = 'leaving';
-          agent.targetPosition = tileToWorld(STATIONS.door);
-          agent.stateChangedAt = now;
-          changed = true;
-          setTimeout(() => {
-            const current = this.agents.get(sessionId);
-            if (current && current.state === 'leaving') {
-              this.evictSession(sessionId);
-              if (this.onSnapshotNeeded) this.onSnapshotNeeded();
-            }
-          }, 3000);
-        } else if (age > this.staleIdleMs && agent.state !== 'idle' && agent.state !== 'leaving') {
-          agent.state = 'idle';
-          agent.stateChangedAt = now;
-          changed = true;
-        }
+    for (const agent of this.agents.values()) {
+      const age = now - agent.lastEventAt;
+      if (age > this.staleEvictMs && agent.state !== 'leaving') {
+        this.scheduleRemoval(agent, true, 3000);
+        changed = true;
+      } else if (agent.state === 'entering' && now - agent.stateChangedAt > this.enteringTimeoutMs) {
+        this.scheduleRemoval(agent, true, 3000);
+        changed = true;
+      } else if (age > this.staleIdleMs && !agent.waitingForHuman && agent.integrationMode !== 'hooks' && agent.state !== 'idle' && agent.state !== 'leaving') {
+        agent.state = 'idle';
+        agent.stateChangedAt = now;
+        changed = true;
       }
-      if (changed && this.onSnapshotNeeded) {
-        this.onSnapshotNeeded();
-      }
-    }, 10000).unref();
+    }
+    if (changed && this.onSnapshotNeeded) {
+      this.onSnapshotNeeded();
+    }
   }
 
   private startWaitingDetector(): void {
-    setInterval(() => {
-      const now = Date.now();
-      let changed = false;
-      for (const [sessionId, agent] of this.agents.entries()) {
-        if (agent.state === 'leaving' || agent.state === 'entering') continue;
+    this.intervals.push(setInterval(() => this.detectWaiting(), 3000).unref());
+  }
 
-        // Evict agents that have been waiting too long (dedicated waiting timeout)
-        if (agent.waitingForHuman && agent.waitingSince) {
-          const waitingAge = now - agent.waitingSince;
-          if (waitingAge > this.waitingEvictMs) {
-            // Archive before eviction so the agent can be restored
-            this.archiveAgent(sessionId, agent);
-            agent.state = 'leaving';
-            agent.targetPosition = tileToWorld(STATIONS.door);
-            agent.stateChangedAt = now;
-            changed = true;
-            setTimeout(() => {
-              const current = this.agents.get(sessionId);
-              if (current && current.state === 'leaving') {
-                this.evictSession(sessionId);
-                if (this.onSnapshotNeeded) this.onSnapshotNeeded();
-              }
-            }, 3000);
-          }
-          continue;
-        }
+  private detectWaiting(): void {
+    const now = Date.now();
+    let changed = false;
+    for (const agent of this.agents.values()) {
+      if (agent.state === 'leaving' || agent.state === 'entering') continue;
 
-        const elapsed = now - agent.lastEventAt;
-
-        // Skip heuristic detection if hooks are managing this agent's waiting state
-        if (agent.hookActive) {
-          continue;
-        }
-
-        // When the last event was a text response and silence has lasted 8+ seconds,
-        // the turn is over — Claude wrote its final text and is waiting for human input.
-        // This avoids false positives because tool_use and thinking events set different lastEventType values.
-        const isTextResponse = agent.lastEventType === 'activity.responding';
-        if (isTextResponse && elapsed > this.waitingThresholdMs) {
-          // Sub-agents go idle between team turns — don't treat silence as "done".
-          // They'll leave properly via session.ended or the normal stale eviction path.
-          if (agent.parentId) {
-            continue;
-          }
-          agent.waitingForHuman = true;
-          agent.waitingSince = now;
-          this.applyState(agent, 'waiting', STATIONS.coffee, 'Waiting...');
+      // Evict agents that have been waiting too long (dedicated waiting timeout)
+      if (agent.waitingForHuman && agent.waitingSince) {
+        const waitingAge = now - agent.waitingSince;
+        if (waitingAge > this.waitingEvictMs) {
+          this.scheduleRemoval(agent, true, 3000);
           changed = true;
         }
+        continue;
       }
-      if (changed && this.onSnapshotNeeded) {
-        this.onSnapshotNeeded();
+
+      const elapsed = now - agent.lastEventAt;
+
+      // Skip heuristic detection if hooks are managing this agent's waiting state
+      if (agent.hookActive || agent.integrationMode === 'hooks') {
+        continue;
       }
-    }, 3000).unref();
+
+      // When the last event was a text response and silence has lasted 8+ seconds,
+      // the turn is over — Claude wrote its final text and is waiting for human input.
+      // This avoids false positives because tool_use and thinking events set different lastEventType values.
+      const isTextResponse = agent.lastEventType === 'activity.responding';
+      if (isTextResponse && elapsed > this.waitingThresholdMs) {
+        // Sub-agents go idle between team turns — don't treat silence as "done".
+        // They'll leave properly via session.ended or the normal stale eviction path.
+        if (agent.parentId) {
+          continue;
+        }
+        agent.waitingForHuman = true;
+        agent.waitingSince = now;
+        this.applyState(agent, 'waiting', STATIONS.coffee, 'Waiting...');
+        changed = true;
+      }
+    }
+    if (changed && this.onSnapshotNeeded) {
+      this.onSnapshotNeeded();
+    }
   }
 }

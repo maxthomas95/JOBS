@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync, renameSync } from 'node:fs';
 import { dirname } from 'node:path';
 
 interface DailyRecord {
@@ -13,6 +13,7 @@ interface SessionRecord {
   project: string | null;
   startedAt: number;
   endedAt: number | null;
+  lastObservedAt?: number;
   toolCounts: Record<string, number>;
 }
 
@@ -23,6 +24,7 @@ interface StatsData {
 }
 
 export interface StatsSummary {
+  timezone: 'UTC';
   sessionsToday: number;
   totalSessions: number;
   totalHours: number;
@@ -42,23 +44,27 @@ export class StatsStore {
   private readonly filePath: string;
   /** Map session ID -> index in agentHistory for O(1) lookup on end */
   private readonly sessionIndex = new Map<string, number>();
+  private readonly flushTimer: ReturnType<typeof setInterval>;
 
   constructor(filePath?: string) {
     this.filePath = filePath ?? process.env.STATS_FILE ?? 'data/stats.json';
     this.data = this.load();
-    // Rebuild sessionIndex from any un-ended sessions
+    // A restart cannot prove that old sessions stayed active during downtime.
+    // Close them at their last persisted observation, then let ingestion reopen.
     for (let i = 0; i < this.data.agentHistory.length; i++) {
       const rec = this.data.agentHistory[i];
       if (rec.endedAt === null && rec.sessionId) {
         this.sessionIndex.set(rec.sessionId, i);
+        this.recordSessionEnd(rec.sessionId, {}, rec.lastObservedAt ?? rec.startedAt);
       }
     }
     // Auto-flush every 60 seconds
-    setInterval(() => this.flush(), 60000).unref();
+    this.flushTimer = setInterval(() => this.flush(), 60000).unref();
   }
 
-  recordSessionStart(sessionId: string, name: string, project: string | null): void {
-    const today = todayStr();
+  recordSessionStart(sessionId: string, name: string, project: string | null, startedAt = Date.now()): void {
+    if (this.sessionIndex.has(sessionId)) return;
+    const today = new Date(startedAt).toISOString().slice(0, 10);
     let daily = this.data.dailySessions.find((d) => d.date === today);
     if (!daily) {
       daily = { date: today, sessionCount: 0, totalMs: 0 };
@@ -71,32 +77,45 @@ export class StatsStore {
       sessionId,
       name,
       project,
-      startedAt: Date.now(),
+      startedAt,
+      lastObservedAt: startedAt,
       endedAt: null,
       toolCounts: {},
     });
     this.sessionIndex.set(sessionId, idx);
   }
 
-  recordSessionEnd(sessionId: string, toolCounts: Record<string, number>): void {
+  recordSessionActivity(sessionId: string, timestamp = Date.now()): void {
+    const idx = this.sessionIndex.get(sessionId);
+    if (idx !== undefined) {
+      const rec = this.data.agentHistory[idx];
+      rec.lastObservedAt = Math.max(rec.lastObservedAt ?? rec.startedAt, timestamp);
+    }
+  }
+
+  recordSessionEnd(sessionId: string, toolCounts: Record<string, number>, endedAt = Date.now()): void {
     const idx = this.sessionIndex.get(sessionId);
     if (idx === undefined) return;
     const rec = this.data.agentHistory[idx];
-    rec.endedAt = Date.now();
+    rec.endedAt = Math.max(rec.startedAt, endedAt);
 
     // Merge per-session tool counts
     for (const [tool, count] of Object.entries(toolCounts)) {
       rec.toolCounts[tool] = (rec.toolCounts[tool] ?? 0) + count;
     }
 
-    // Accumulate daily totalMs
-    const today = todayStr();
-    let daily = this.data.dailySessions.find((d) => d.date === today);
-    if (!daily) {
-      daily = { date: today, sessionCount: 0, totalMs: 0 };
-      this.data.dailySessions.push(daily);
+    // Attribute elapsed time to each UTC day crossed by the active segment.
+    for (let start = rec.startedAt; start < rec.endedAt;) {
+      const date = new Date(start).toISOString().slice(0, 10);
+      const end = Math.min(Date.parse(`${date}T00:00:00.000Z`) + 86400000, rec.endedAt);
+      let daily = this.data.dailySessions.find((d) => d.date === date);
+      if (!daily) {
+        daily = { date, sessionCount: 0, totalMs: 0 };
+        this.data.dailySessions.push(daily);
+      }
+      daily.totalMs += end - start;
+      start = end;
     }
-    daily.totalMs += rec.endedAt - rec.startedAt;
 
     this.sessionIndex.delete(sessionId);
   }
@@ -114,7 +133,8 @@ export class StatsStore {
     const daily = this.data.dailySessions.find((d) => d.date === today);
     const sessionsToday = daily?.sessionCount ?? 0;
     const totalSessions = this.data.dailySessions.reduce((sum, d) => sum + d.sessionCount, 0);
-    const totalMs = this.data.dailySessions.reduce((sum, d) => sum + d.totalMs, 0);
+    const activeMs = [...this.sessionIndex.values()].reduce((sum, idx) => sum + Math.max(0, Date.now() - this.data.agentHistory[idx].startedAt), 0);
+    const totalMs = this.data.dailySessions.reduce((sum, d) => sum + d.totalMs, 0) + activeMs;
     const totalHours = Math.round((totalMs / 3600000) * 10) / 10;
 
     const sorted = Object.entries(this.data.globalToolCounts)
@@ -122,26 +142,23 @@ export class StatsStore {
       .slice(0, 5)
       .map(([tool, count]) => ({ tool, count }));
 
-    return { sessionsToday, totalSessions, totalHours, topTools: sorted };
+    return { timezone: 'UTC', sessionsToday, totalSessions, totalHours, topTools: sorted };
   }
 
   flush(): void {
+    this.data.dailySessions.sort((a, b) => a.date.localeCompare(b.date));
     // Trim: keep last 30 days
     if (this.data.dailySessions.length > 30) {
       this.data.dailySessions = this.data.dailySessions.slice(-30);
     }
     // Trim: keep last 100 session records
     if (this.data.agentHistory.length > 100) {
-      const removed = this.data.agentHistory.length - 100;
-      this.data.agentHistory = this.data.agentHistory.slice(-100);
-      // Adjust sessionIndex offsets
-      for (const [key, idx] of this.sessionIndex.entries()) {
-        const newIdx = idx - removed;
-        if (newIdx < 0) {
-          this.sessionIndex.delete(key);
-        } else {
-          this.sessionIndex.set(key, newIdx);
-        }
+      const completed = this.data.agentHistory.filter(rec => rec.endedAt !== null).slice(-100);
+      const active = this.data.agentHistory.filter(rec => rec.endedAt === null);
+      this.data.agentHistory = [...completed, ...active];
+      this.sessionIndex.clear();
+      for (const [idx, rec] of this.data.agentHistory.entries()) {
+        if (rec.endedAt === null && rec.sessionId) this.sessionIndex.set(rec.sessionId, idx);
       }
     }
 
@@ -150,11 +167,17 @@ export class StatsStore {
       if (!existsSync(dir)) {
         mkdirSync(dir, { recursive: true });
       }
-      writeFileSync(this.filePath, JSON.stringify(this.data, null, 2), 'utf-8');
+      const temporaryPath = `${this.filePath}.tmp`;
+      writeFileSync(temporaryPath, JSON.stringify(this.data, null, 2), 'utf-8');
+      renameSync(temporaryPath, this.filePath);
     } catch (err) {
       // eslint-disable-next-line no-console
       console.error('[stats] flush error:', (err as Error).message);
     }
+  }
+
+  dispose(): void {
+    clearInterval(this.flushTimer);
   }
 
   private load(): StatsData {

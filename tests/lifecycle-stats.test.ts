@@ -1,0 +1,74 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { StatsStore } from '../server/stats-store.js';
+import { SessionManager } from '../server/session-manager.js';
+
+test('stats starts/ends are idempotent and restart excludes unobserved downtime', (t) => {
+  const directory = mkdtempSync(join(tmpdir(), 'jobs-stats-'));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  let now = Date.parse('2026-09-07T23:00:00Z');
+  t.mock.method(Date, 'now', () => now);
+  const file = join(directory, 'stats.json');
+  const store = new StatsStore(file);
+  t.after(() => store.dispose());
+  store.recordSessionStart('session', 'Fixture', null);
+  store.recordSessionStart('session', 'Fixture', null);
+  now += 2 * 3600000;
+  store.recordSessionActivity('session');
+  store.flush();
+  now += 7 * 86400000;
+  const restarted = new StatsStore(file);
+  t.after(() => restarted.dispose());
+  const data = restarted.getStats();
+  assert.equal(data.agentHistory.length, 1);
+  assert.equal(data.agentHistory[0].endedAt, Date.parse('2026-09-08T01:00:00Z'));
+  assert.equal(data.dailySessions.find(day => day.date === '2026-09-07')?.totalMs, 3600000);
+  assert.equal(data.dailySessions.find(day => day.date === '2026-09-08')?.totalMs, 3600000);
+  restarted.recordSessionEnd('session', {});
+  assert.equal(restarted.getSummary().totalHours, 2);
+  assert.equal(restarted.getSummary().totalSessions, 1);
+  assert.equal(restarted.getSummary().timezone, 'UTC');
+});
+
+test('stale eviction closes accounting at last activity and resume starts a fresh observed interval', (t) => {
+  const directory = mkdtempSync(join(tmpdir(), 'jobs-stale-'));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  let now = Date.parse('2026-09-07T10:00:00Z');
+  t.mock.method(Date, 'now', () => now);
+  const store = new StatsStore(join(directory, 'stats.json'));
+  const manager = new SessionManager(60000, 180000);
+  t.after(() => { manager.dispose(); store.dispose(); });
+  manager.setStatsStore(store);
+  const agent = manager.registerWebhookAgent('fixture', { state: 'running' });
+  const start = agent.startedAt;
+  now += 3600000;
+  manager.updateWebhookAgent(agent.id, 'running', null, null);
+  const lastActivity = now;
+  now += 3600000;
+  (manager as unknown as { sweepStaleSessions(): void }).sweepStaleSessions();
+  assert.equal(agent.state, 'leaving');
+  assert.equal(store.getStats().agentHistory[0].endedAt, lastActivity);
+  assert.equal(store.getSummary().totalHours, 1);
+  manager.registerWebhookAgent('fixture', { state: 'running' });
+  assert.equal(agent.state, 'coding');
+  assert.equal(agent.startedAt, now);
+  assert.notEqual(agent.startedAt, start);
+  assert.equal(store.getStats().agentHistory.filter(record => record.endedAt === null).length, 1);
+});
+
+test('history trimming preserves every active session for eventual accounting', (t) => {
+  const directory = mkdtempSync(join(tmpdir(), 'jobs-active-stats-'));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  let now = Date.parse('2026-09-07T10:00:00Z');
+  t.mock.method(Date, 'now', () => now);
+  const store = new StatsStore(join(directory, 'stats.json'));
+  t.after(() => store.dispose());
+  for (let i = 0; i < 105; i++) store.recordSessionStart(`session-${i}`, 'Fixture', null);
+  store.flush();
+  now += 3600000;
+  store.recordSessionEnd('session-0', {});
+  assert.equal(store.getStats().agentHistory.find(record => record.sessionId === 'session-0')?.endedAt, now);
+});
