@@ -39,6 +39,65 @@ function emptyData(): StatsData {
   return { dailySessions: [], agentHistory: [], globalToolCounts: {} };
 }
 
+function record(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown> : null;
+}
+
+function nonnegative(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= Number.MAX_SAFE_INTEGER;
+}
+
+function identifier(value: unknown): string | undefined {
+  return typeof value === 'string' && /^[\w.:-]{1,128}$/.test(value) ? value : undefined;
+}
+
+function projectBasename(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const part = value.replace(/\\/g, '/').split('/').filter(Boolean).pop();
+  return part && part !== '.' && part !== '..' ? part.replace(/\p{Cc}/gu, '').slice(0, 128) || null : null;
+}
+
+function counts(value: unknown): Record<string, number> {
+  return Object.fromEntries(Object.entries(record(value) ?? {}).filter(
+    (entry): entry is [string, number] => !!identifier(entry[0]) && nonnegative(entry[1]) && Number.isInteger(entry[1]),
+  ));
+}
+
+/** Persisted files are untrusted input too: older versions may contain extra
+ * runtime fields, and a partially edited document must not prevent startup. */
+function parseStats(value: unknown): StatsData {
+  const data = record(value);
+  if (!data) return emptyData();
+  const dailySessions: DailyRecord[] = [];
+  const agentHistory: SessionRecord[] = [];
+  for (const value of Array.isArray(data.dailySessions) ? data.dailySessions : []) {
+    const day = record(value);
+    if (!day || typeof day.date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(day.date)) continue;
+    const date = Date.parse(`${day.date}T00:00:00Z`);
+    if (!Number.isFinite(date) || new Date(date).toISOString().slice(0, 10) !== day.date) continue;
+    if (!nonnegative(day.sessionCount) || !Number.isInteger(day.sessionCount) || !nonnegative(day.totalMs)) continue;
+    dailySessions.push({ date: day.date, sessionCount: day.sessionCount, totalMs: day.totalMs });
+  }
+  const now = Date.now();
+  const timestamp = (value: unknown): value is number => nonnegative(value) && value <= now;
+  for (const value of Array.isArray(data.agentHistory) ? data.agentHistory : []) {
+    const session = record(value);
+    if (!session || !timestamp(session.startedAt)) continue;
+    if (session.endedAt !== null && (!timestamp(session.endedAt) || session.endedAt < session.startedAt)) continue;
+    agentHistory.push({
+      sessionId: identifier(session.sessionId),
+      name: typeof session.name === 'string' ? session.name.replace(/\p{Cc}/gu, '').slice(0, 64) : 'Unknown session',
+      project: projectBasename(session.project),
+      startedAt: session.startedAt,
+      endedAt: session.endedAt as number | null,
+      lastObservedAt: timestamp(session.lastObservedAt) ? Math.max(session.startedAt, session.lastObservedAt) : session.startedAt,
+      toolCounts: counts(session.toolCounts),
+    });
+  }
+  return { dailySessions, agentHistory, globalToolCounts: counts(data.globalToolCounts) };
+}
+
 export class StatsStore {
   private data: StatsData;
   private readonly filePath: string;
@@ -121,11 +180,29 @@ export class StatsStore {
   }
 
   recordToolUse(tool: string): void {
-    this.data.globalToolCounts[tool] = (this.data.globalToolCounts[tool] ?? 0) + 1;
+    const previous = Object.hasOwn(this.data.globalToolCounts, tool) ? this.data.globalToolCounts[tool] : 0;
+    Object.defineProperty(this.data.globalToolCounts, tool, { value: previous + 1, writable: true, enumerable: true, configurable: true });
   }
 
   getStats(): StatsData {
     return this.data;
+  }
+
+  /** Explicit public shape, detached from both live counters and disk input. */
+  getPublicStats(): StatsData {
+    return {
+      dailySessions: this.data.dailySessions.map(day => ({ date: day.date, sessionCount: day.sessionCount, totalMs: day.totalMs })),
+      agentHistory: this.data.agentHistory.map(session => ({
+        sessionId: session.sessionId,
+        name: session.name,
+        project: projectBasename(session.project),
+        startedAt: session.startedAt,
+        endedAt: session.endedAt,
+        lastObservedAt: session.lastObservedAt,
+        toolCounts: counts(session.toolCounts),
+      })),
+      globalToolCounts: counts(this.data.globalToolCounts),
+    };
   }
 
   getSummary(): StatsSummary {
@@ -184,12 +261,7 @@ export class StatsStore {
     try {
       if (existsSync(this.filePath)) {
         const raw = readFileSync(this.filePath, 'utf-8');
-        const parsed = JSON.parse(raw) as Partial<StatsData>;
-        return {
-          dailySessions: parsed.dailySessions ?? [],
-          agentHistory: parsed.agentHistory ?? [],
-          globalToolCounts: parsed.globalToolCounts ?? {},
-        };
+        return parseStats(JSON.parse(raw));
       }
     } catch {
       // Corrupt or missing — start fresh

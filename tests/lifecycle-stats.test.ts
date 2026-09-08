@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { StatsStore } from '../server/stats-store.js';
@@ -71,4 +71,51 @@ test('history trimming preserves every active session for eventual accounting', 
   now += 3600000;
   store.recordSessionEnd('session-0', {});
   assert.equal(store.getStats().agentHistory.find(record => record.sessionId === 'session-0')?.endedAt, now);
+});
+
+test('public stats redact legacy private fields, normalize project paths, and detach counters', (t) => {
+  const directory = mkdtempSync(join(tmpdir(), 'jobs-public-stats-'));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const file = join(directory, 'stats.json');
+  const now = Date.now();
+  const session = {
+    sessionId: 'fixture', name: 'Fixture', project: 'C:\\PRIVATE_USER\\repo\\project',
+    startedAt: now - 60000, endedAt: now - 30000, filePath: 'PRIVATE_TRANSCRIPT',
+    toolCounts: { Read: 1, unknown_tool: { input: 'PRIVATE_INPUT' }, 'PRIVATE command text': 7 },
+  };
+  writeFileSync(file, JSON.stringify({
+    rawTranscript: 'PRIVATE_TRANSCRIPT',
+    dailySessions: [{ date: new Date(now).toISOString().slice(0, 10), sessionCount: 2, totalMs: 60000, raw: 'PRIVATE_RAW' }],
+    agentHistory: [session, { ...session, sessionId: 'unix', project: '/PRIVATE_USER/work/another-project' }],
+    globalToolCounts: { Read: 2, Write: 'PRIVATE_OUTPUT' },
+  }));
+  const store = new StatsStore(file);
+  t.after(() => store.dispose());
+  Object.assign(store.getStats(), { internalPrivateField: 'PRIVATE_LIVE' });
+  Object.assign(store.getStats().agentHistory[0], { internalPrivateField: 'PRIVATE_LIVE' });
+  const exposed = store.getPublicStats();
+  assert.ok(!JSON.stringify(exposed).includes('PRIVATE_'));
+  assert.deepEqual(exposed.agentHistory.map(record => record.project), ['project', 'another-project']);
+  assert.deepEqual(exposed.globalToolCounts, { Read: 2 });
+  exposed.agentHistory[0].toolCounts.Read = 500;
+  assert.equal(store.getStats().agentHistory[0].toolCounts.Read, 1);
+});
+
+test('malformed persisted shapes cannot crash loading, summaries, or flush', (t) => {
+  const directory = mkdtempSync(join(tmpdir(), 'jobs-invalid-stats-'));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const fixtures = [null, [], 5, { dailySessions: 'invalid', agentHistory: {}, globalToolCounts: [] }, {
+    dailySessions: [null, { date: 'not-a-date', totalMs: 1, sessionCount: 1 }, { date: '2026-02-30', totalMs: 1, sessionCount: 1 }],
+    agentHistory: [null, { startedAt: 'yesterday', endedAt: null }, { startedAt: 1e99, endedAt: null }],
+    globalToolCounts: { Read: -1, Write: 'nope', Task: null },
+  }];
+  for (const [index, fixture] of fixtures.entries()) {
+    const file = join(directory, `${index}.json`);
+    writeFileSync(file, JSON.stringify(fixture));
+    const store = new StatsStore(file);
+    t.after(() => store.dispose());
+    assert.deepEqual(store.getPublicStats(), { dailySessions: [], agentHistory: [], globalToolCounts: {} });
+    assert.equal(store.getSummary().totalHours, 0);
+    store.flush();
+  }
 });
