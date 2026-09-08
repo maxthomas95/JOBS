@@ -19,6 +19,17 @@ test('snapshots contain only public fields and detach nested state', (t) => {
   assert.notEqual(internal.position.x, -100);
 });
 
+test('unresolved dash-encoded transcript directories never become public project names', (t) => {
+  const manager = new SessionManager();
+  t.after(() => manager.dispose());
+  manager.registerSession('unavailable-project', 'C:/Users/PRIVATE_USER/.claude/projects/C--Users-PRIVATE_USER-repo-project/unavailable-project.jsonl');
+  const [agent] = manager.getSnapshot();
+  assert.equal(agent.project, null);
+  assert.ok(!JSON.stringify(agent).includes('PRIVATE_USER'));
+  manager.handleHookEvent('SessionStart', { session_id: agent.id, cwd: 'project' });
+  assert.equal(manager.getSnapshot()[0].project, 'project', 'a hook can supply the authoritative basename');
+});
+
 test('webhook stop, resume, and repeated start do not delete the resumed agent', async (t) => {
   const manager = new SessionManager();
   t.after(() => manager.dispose());

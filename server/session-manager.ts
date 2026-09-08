@@ -84,8 +84,9 @@ function extractProjectName(filePath: string): string | null {
           }
         } catch { /* permission error — skip */ }
       }
-      // No dash resolved — project is directly under drive/root
-      return rest;
+      // The encoded string may contain every parent directory (including a user
+      // name). An unavailable mount is not evidence that it is one basename.
+      return null;
     }
   }
   // Fallback: use basename of the path minus extension
