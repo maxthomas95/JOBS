@@ -2,6 +2,12 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+Shared working guidance is also available in [AGENTS.md](AGENTS.md), with scoped
+guidance under `server/` and `src/`. See the [September 2026 review](docs/reviews/2026-09-07.md)
+for the original findings. [Implementation tracking](docs/IMPLEMENTATION.md)
+records the resulting fixes and validation; [Codex setup](docs/codex.md) describes
+the lifecycle integration. AGENTS.md contains the current verification commands.
+
 ## Project Overview
 
 **J.O.B.S. (Jarvis Operations & Bot Surveillance)** — a self-hosted, browser-based pixel-art office that visualizes Claude Code agent activity in real-time. Each active coding session spawns a character who moves between stations (desk, whiteboard, terminal, library, coffee machine). Part of the Jarvis AI assistant ecosystem.
@@ -20,7 +26,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 The system has two main parts connected by WebSocket:
 
-**Server (`server/`)** — Node.js process that watches Claude Code JSONL session files, strips sensitive data (code, file paths to basenames, bash commands to descriptions), and broadcasts normalized `PixelEvent` objects to browsers.
+**Server (`server/`)** — Node.js process that watches Claude Code JSONL session files, strips sensitive data (file paths to basenames, shell/search work to fixed labels), and broadcasts normalized `PixelEvent` objects to browsers. Codex has a separate metadata-only lifecycle hook adapter.
 - `bridge/` — Core modules extracted from pixelhq-bridge (MIT): watcher, parser, claude-adapter, events, types
 - `session-manager.ts` — Discovers active sessions, assigns agent IDs, tracks agent lifecycle state machine
 - `ws-server.ts` — WebSocket broadcast to all connected browsers, with auth + connection limits
@@ -46,7 +52,9 @@ The system has two main parts connected by WebSocket:
 
 ## Project Status
 
-Milestones v1 (M1-M5) and v2 (M1-M6) are complete. Currently in v2-M7 (Stabilization & Polish). See VISION.md for the full roadmap.
+VISION.md marks v1 (M1-M5) and v2 (M1-M8) implemented. The September modernization
+adds authenticated viewing, lifecycle fixes, Codex hooks, and the modern office
+shell. See docs/IMPLEMENTATION.md for validation and remaining limitations.
 
 ## Key Design Decisions
 
@@ -94,9 +102,9 @@ Tags mark release points.
 
 ## Security (v2-M8)
 
-- **Authentication:** Set `JOBS_TOKEN` env var to enable shared-token auth for WebSocket and `/api/hooks`. Token is auto-injected into the HTML page via `<meta>` tag; browser clients read it automatically. If unset, auth is disabled (zero-config default).
+- **Authentication:** `JOBS_TOKEN` enables browser sign-in using a revocable HttpOnly cookie and bearer auth for ingestion. Stats/diagnostics/WebSocket are protected. Tokens never go in HTML, browser storage, or URLs. `ALLOWED_HOSTS` permits explicit network hosts; default access is loopback.
 - **Input sanitization:** All webhook/hook payloads validated through `server/sanitize.ts` (safeString, safeUrl, safeEnum). URLs must be http/https — `javascript:` and `data:` protocols are rejected server-side and client-side.
-- **Rate limiting:** API routes limited to 120 req/min/IP, healthz to 30 req/min/IP. In-memory sliding window, no external dependencies.
+- **Rate limiting:** API routes allow 1,200 req/min/IP, sign-in 10/min/IP, healthz 30/min/IP. In-memory sliding window, no external dependencies.
 - **WebSocket limits:** `WS_MAX_CLIENTS` (default 50) global cap, `WS_MAX_PER_IP` (default 10) per-IP cap.
 - **CSP headers:** Strict Content-Security-Policy, X-Frame-Options DENY, nosniff, Permissions-Policy.
 - **Docker:** Non-root user (`jobs`), read-only filesystem, `cap_drop: ALL`, `no-new-privileges`, resource limits (512MB/1CPU).

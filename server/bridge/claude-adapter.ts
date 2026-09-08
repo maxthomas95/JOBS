@@ -5,6 +5,7 @@ import {
   createToolEvent,
 } from './pixel-events.js';
 import type { RawContentBlock, RawJsonlEvent } from './types.js';
+import { safeToolContext } from '../public-event.js';
 
 /** Track toolUseId → toolName so we can label completion events */
 const toolNameCache = new Map<string, { name: string; ts: number }>();
@@ -26,38 +27,6 @@ function getMeta(raw: RawJsonlEvent): { sessionId: string; agentId: string; time
   return { sessionId, agentId, timestamp };
 }
 
-function extractSafeContext(toolName: string, input: Record<string, unknown> | undefined): string | null {
-  if (!input) {
-    return null;
-  }
-  const normalized = toolName.toLowerCase();
-
-  if (normalized.includes('read') || normalized.includes('write') || normalized.includes('edit')) {
-    const filePath = input.file_path;
-    if (typeof filePath === 'string') {
-      const parts = filePath.split(/[\\/]/g);
-      return parts[parts.length - 1] ?? null;
-    }
-    return null;
-  }
-
-  if (normalized.includes('bash')) {
-    return typeof input.description === 'string' ? input.description : null;
-  }
-
-  if (normalized.includes('grep') || normalized.includes('glob')) {
-    return typeof input.pattern === 'string' ? input.pattern : null;
-  }
-
-  if (normalized.includes('task')) {
-    // Prefer the Claude Code-assigned agent name (e.g. "m2-builder")
-    if (typeof input.name === 'string') return input.name;
-    if (typeof input.description === 'string') return input.description;
-    return typeof input.subagent_type === 'string' ? input.subagent_type : null;
-  }
-
-  return null;
-}
 
 function assistantEvents(raw: RawJsonlEvent): PixelEvent[] {
   const { sessionId, agentId, timestamp } = getMeta(raw);
@@ -92,7 +61,7 @@ function assistantEvents(raw: RawJsonlEvent): PixelEvent[] {
       }
     } else if (parsed.type === 'tool_use') {
       const tool = parsed.name ?? 'unknown_tool';
-      const context = extractSafeContext(tool, parsed.input);
+      const context = safeToolContext(tool, parsed.input);
       // Cache tool name for matching on completion
       if (parsed.id) {
         toolNameCache.set(parsed.id, { name: tool, ts: Date.now() });

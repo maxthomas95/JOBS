@@ -1,32 +1,37 @@
 import { Router } from 'express';
 import type { SessionManager } from './session-manager.js';
 import type { WSServer } from './ws-server.js';
-import { safeString, safeUrl, safeEnum } from './sanitize.js';
+import { safeString, safeUrl, safeEnum, safeBasename, safeIdentifier } from './sanitize.js';
+import { sameOrigin, tokenMatches } from './auth.js';
 
 type WebhookEvent = 'start' | 'stop' | 'status' | 'error' | 'heartbeat';
 const VALID_EVENTS = new Set<WebhookEvent>(['start', 'stop', 'status', 'error', 'heartbeat']);
 
-export function createWebhookRouter(sessionManager: SessionManager, wsServer: WSServer): Router {
+export function createWebhookRouter(sessionManager: SessionManager, wsServer: WSServer,
+  webhookToken = process.env.WEBHOOK_TOKEN || process.env.JOBS_TOKEN || null): Router {
   const router = Router();
-  const webhookToken = process.env.WEBHOOK_TOKEN ?? null;
 
   router.post('/api/webhooks', (req, res) => {
     try {
+      if (!sameOrigin(req)) {
+        res.status(403).json({ ok: false, error: 'Invalid origin' });
+        return;
+      }
       // Auth check
       if (webhookToken) {
         const authHeader = req.headers.authorization;
         const headerToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
         const bodyToken = safeString((req.body as Record<string, unknown>)?.token, 256);
-        if (headerToken !== webhookToken && bodyToken !== webhookToken) {
+        if (!tokenMatches(headerToken, webhookToken) && !tokenMatches(bodyToken, webhookToken)) {
           res.status(401).json({ ok: false, error: 'Invalid or missing token' });
           return;
         }
       }
 
-      const body = req.body as Record<string, unknown>;
+      const body = (req.body ?? {}) as Record<string, unknown>;
 
       // Sanitize all fields
-      const sourceId = safeString(body.source_id, 128);
+      const sourceId = safeIdentifier(body.source_id, 128);
       const event = safeEnum(body.event, VALID_EVENTS);
 
       if (!sourceId) {
@@ -40,10 +45,12 @@ export function createWebhookRouter(sessionManager: SessionManager, wsServer: WS
 
       const sourceName = safeString(body.source_name, 64);
       const sourceType = safeString(body.source_type, 64);
-      const project = safeString(body.project, 128);
+      const project = safeBasename(body.project);
       const machine = safeString(body.machine, 64);
       const state = safeString(body.state, 64);
-      const activity = safeString(body.activity, 200);
+      const activity = sourceType === 'codex'
+        ? (state === 'waiting' ? 'Turn complete' : 'Codex activity')
+        : safeString(body.activity, 200);
       const url = safeUrl(body.url);
 
       const agentId = `wh:${sourceId}`;

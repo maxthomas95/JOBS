@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Application, Container, Color } from 'pixi.js';
 import { AnimationController } from './AnimationController.js';
 import { DayNightCycle } from './DayNightCycle.js';
@@ -6,49 +6,25 @@ import { FollowMode } from './FollowMode.js';
 import { BubbleOverlay } from '../ui/BubbleOverlay.js';
 import { TiledMapRenderer } from './tileset/TiledMapRenderer.js';
 import type { TiledMap } from './tileset/TiledMapRenderer.js';
-import { createTilesetRenderer } from './tileset/createTilesetRenderer.js';
+import { ProceduralTilesetRenderer } from './tileset/ProceduralTilesetRenderer.js';
 import type { TilesetRenderer } from './tileset/TilesetRenderer.js';
-import { setStationsFromConfig } from '../types/agent.js';
+import { OFFICE_LAYOUT, FALLBACK_WALKABILITY, withWalkableStations } from '../types/office-layout.js';
 import { setWalkabilityFromConfig } from './Pathfinder.js';
 import type { MapConfig } from './tileset/MapConfig.js';
 import tiledMapData from '../assets/maps/office-tiled.json';
-import officeConfig from '../assets/maps/office-default.json';
+
 import { useThemeStore } from '../state/useThemeStore.js';
 
-// Import tileset images — Vite will resolve these to hashed URLs (or 404 if missing)
-let officeSheetUrl: string | undefined;
-let roomSheetUrl: string | undefined;
-try {
-  officeSheetUrl = new URL('../assets/tiles/Modern_Office_16x16.png', import.meta.url).href;
-  roomSheetUrl = new URL('../assets/tiles/Room_Builder_Office_16x16.png', import.meta.url).href;
-} catch {
-  // Images not available — will use procedural fallback
-}
-
-/** Station positions for the Tiled map layout. */
-const TILED_STATIONS = {
-  door: { x: 17, y: 13 },
-  whiteboard: { x: 8, y: 12 },   // open area — thinking/planning
-  terminal: { x: 3, y: 12 },     // bottom-left desk
-  library: { x: 2, y: 2 },       // top-left bookcase (reading)
-  coffee: { x: 9, y: 12 },       // coffee maker (idle/waiting)
-  desks: [
-    // Desk Row 1 — top seats (agents above desk, facing down)
-    { x: 3, y: 2 }, { x: 6, y: 2 }, { x: 9, y: 2 }, { x: 12, y: 2 },
-    // Desk Row 1 — bottom seats (agents below desk, facing up)
-    { x: 3, y: 5 }, { x: 6, y: 5 }, { x: 9, y: 5 }, { x: 12, y: 5 },
-    // Desk Row 2 — top seats (agents above desk, facing down)
-    { x: 3, y: 7 }, { x: 6, y: 7 }, { x: 9, y: 7 }, { x: 12, y: 7 },
-    // Desk Row 2 — bottom seats (agents below desk, facing up)
-    { x: 3, y: 10 }, { x: 6, y: 10 }, { x: 9, y: 10 }, { x: 12, y: 10 },
-    // Supervisor desk (right side, isolated)
-    { x: 16, y: 8 },
-  ],
-};
+// Optional licensed images are discovered at build time; an unlicensed checkout
+// uses the procedural office without failed requests or missing-asset warnings.
+const tileImages = import.meta.glob('../assets/tiles/*.png', { eager: true, query: '?url', import: 'default' }) as Record<string, string>;
+const officeSheetUrl = tileImages['../assets/tiles/Modern_Office_16x16.png'];
+const roomSheetUrl = tileImages['../assets/tiles/Room_Builder_Office_16x16.png'];
 
 export function PixelOffice() {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [renderStatus, setRenderStatus] = useState<'loading' | 'ready' | 'error'>('loading');
 
   useEffect(() => {
     if (!hostRef.current) {
@@ -66,6 +42,19 @@ export function PixelOffice() {
     let tiledRenderer: TiledMapRenderer | null = null;
     let fallbackRenderer: TilesetRenderer | null = null;
     let destroyed = false;
+    let initialized = false;
+    let disposed = false;
+    const dispose = () => {
+      if (disposed || !initialized) return;
+      disposed = true;
+      controller?.destroy();
+      followMode?.destroy();
+      tiledRenderer?.destroy();
+      fallbackRenderer?.destroy();
+      dayNight.destroy();
+      app.destroy(true, { children: true });
+      canvasRef.current = null;
+    };
 
     // Subscribe to theme changes for PixiJS background
     const unsubTheme = useThemeStore.subscribe(
@@ -88,9 +77,10 @@ export function PixelOffice() {
         resolution: window.devicePixelRatio,
         autoDensity: true,
       });
+      initialized = true;
 
       if (destroyed) {
-        app.destroy(true, { children: true });
+        dispose();
         return;
       }
 
@@ -111,11 +101,11 @@ export function PixelOffice() {
             { firstgid: 225, url: officeSheetUrl! },
           ]);
           await tiledRenderer.init();
+          if (destroyed) { tiledRenderer.destroy(); return; }
           tiledRenderer.renderMap(world);
 
           // Set stations and walkability for the Tiled layout
-          setStationsFromConfig(TILED_STATIONS);
-          const walkability = tiledRenderer.computeWalkability();
+          const walkability = withWalkableStations(tiledRenderer.computeWalkability());
           setWalkabilityFromConfig(walkability, tiledMap.width, tiledMap.height);
 
           console.log('[tileset] Using Tiled map renderer');
@@ -128,15 +118,15 @@ export function PixelOffice() {
 
       // Fallback to old MapConfig-based renderer
       if (!tiledRenderer) {
-        const mapConfig = officeConfig as MapConfig;
-        setStationsFromConfig(mapConfig.stations);
+        const mapConfig: MapConfig = {
+          name: 'Shared office fallback', gridWidth: OFFICE_LAYOUT.width,
+          gridHeight: OFFICE_LAYOUT.height, tileSize: 16, tilesets: {}, layers: [],
+          stations: OFFICE_LAYOUT.stations, walkability: FALLBACK_WALKABILITY,
+        };
         setWalkabilityFromConfig(mapConfig.walkability, mapConfig.gridWidth, mapConfig.gridHeight);
-
-        const assetUrls: Record<string, string> = {};
-        if (officeSheetUrl) assetUrls['office'] = officeSheetUrl;
-        if (roomSheetUrl) assetUrls['room'] = roomSheetUrl;
-
-        fallbackRenderer = await createTilesetRenderer(assetUrls);
+        fallbackRenderer = new ProceduralTilesetRenderer();
+        await fallbackRenderer.init();
+        if (destroyed) { fallbackRenderer.destroy(); return; }
         fallbackRenderer.renderMap(world, mapConfig);
         console.log('[tileset] Using fallback MapConfig renderer');
       }
@@ -151,26 +141,22 @@ export function PixelOffice() {
       followMode = new FollowMode(app, world);
       controller = new AnimationController(app, agentsLayer, ambientLayer, dayNight, followMode);
       await controller.init();
-    })();
+      if (!destroyed) setRenderStatus('ready');
+    })().catch(() => {
+      if (!destroyed) setRenderStatus('error');
+      dispose();
+    });
 
     return () => {
       destroyed = true;
       unsubTheme();
-      controller?.destroy();
-      followMode?.destroy();
-      tiledRenderer?.destroy();
-      fallbackRenderer?.destroy();
-      dayNight.destroy();
-      app.destroy(true, { children: true });
-      canvasRef.current = null;
-      if (hostRef.current) {
-        hostRef.current.innerHTML = '';
-      }
+      dispose();
     };
   }, []);
 
   return (
     <div className="pixel-office" ref={hostRef}>
+      {renderStatus !== 'ready' && <div className="office-render-status" role="status">{renderStatus === 'loading' ? 'Opening the office…' : 'The office could not render. Session activity is still available in the roster.'}</div>}
       <BubbleOverlay canvasRef={canvasRef} />
     </div>
   );

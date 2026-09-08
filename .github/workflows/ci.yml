@@ -35,7 +35,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npx tsc --noEmit
+      - run: npm test
       - run: npm run build
 
   audit:
@@ -46,4 +46,4 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: npm audit --audit-level=critical
+      - run: npm audit --audit-level=high

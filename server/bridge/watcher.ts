@@ -51,6 +51,9 @@ export class SessionWatcher extends EventEmitter {
   private watcher: FSWatcher | null = null;
   private readonly fileOffsets = new Map<string, number>();
   private readonly announcedSessions = new Set<string>();
+  private readonly reads = new Map<string, Promise<void>>();
+  private readonly checkpoints = new Map<string, Buffer>();
+  private readonly discardPartial = new Set<string>();
 
   constructor(private readonly claudeDir: string) {
     super();
@@ -79,9 +82,12 @@ export class SessionWatcher extends EventEmitter {
       void this.processFile(path, false);
     });
     this.watcher.on('unlink', (path) => {
-      this.fileOffsets.delete(path);
-      const sessionId = basename(path, '.jsonl');
-      this.announcedSessions.delete(sessionId);
+      void this.enqueue(path, async () => {
+        this.fileOffsets.delete(path);
+        this.checkpoints.delete(path);
+        this.discardPartial.delete(path);
+        this.announcedSessions.delete(basename(path, '.jsonl'));
+      });
     });
     this.watcher.on('error', (error) => {
       this.emit('error', error);
@@ -93,9 +99,23 @@ export class SessionWatcher extends EventEmitter {
       await this.watcher.close();
       this.watcher = null;
     }
+    await Promise.all(this.reads.values());
   }
 
-  private async processFile(filePath: string, isInitialAdd: boolean): Promise<void> {
+  private enqueue(filePath: string, operation: () => Promise<void>): Promise<void> {
+    const next = (this.reads.get(filePath) ?? Promise.resolve()).then(operation);
+    this.reads.set(filePath, next);
+    void next.finally(() => {
+      if (this.reads.get(filePath) === next) this.reads.delete(filePath);
+    }).catch(() => {});
+    return next;
+  }
+
+  private processFile(filePath: string, isInitialAdd: boolean): Promise<void> {
+    return this.enqueue(filePath, () => this.readFile(filePath, isInitialAdd));
+  }
+
+  private async readFile(filePath: string, isInitialAdd: boolean): Promise<void> {
     const check = isSessionJsonl(filePath);
     if (!check.valid) {
       return;
@@ -120,15 +140,24 @@ export class SessionWatcher extends EventEmitter {
         this.emit('session', sessionPayload);
       }
 
-      if (isInitialAdd) {
+      if (isInitialAdd && !this.fileOffsets.has(filePath)) {
         // Start tailing from EOF so we do not replay historical events on server boot.
         this.fileOffsets.set(filePath, stat.size);
+        const checkpoint = await this.readCheckpoint(filePath, stat.size);
+        this.checkpoints.set(filePath, checkpoint);
+        // A record already partially written at boot belongs to historical data.
+        if (checkpoint.length && checkpoint[checkpoint.length - 1] !== 10) this.discardPartial.add(filePath);
         return;
       }
 
       const previousOffset = this.fileOffsets.get(filePath) ?? 0;
-      if (stat.size < previousOffset) {
+      const checkpoint = this.checkpoints.get(filePath);
+      // Compare the bytes before the cursor as well as length: truncate-and-rewrite
+      // can grow past the old offset before the next filesystem notification.
+      if (stat.size < previousOffset || (checkpoint && !checkpoint.equals(await this.readCheckpoint(filePath, previousOffset)))) {
         this.fileOffsets.set(filePath, 0);
+        this.checkpoints.delete(filePath);
+        this.discardPartial.delete(filePath);
       }
 
       const nextOffset = this.fileOffsets.get(filePath) ?? 0;
@@ -137,32 +166,47 @@ export class SessionWatcher extends EventEmitter {
       // Read only new bytes from offset using a stream
       const chunks: Buffer[] = [];
       await new Promise<void>((resolve, reject) => {
-        const stream = createReadStream(filePath, { start: nextOffset });
+        const stream = createReadStream(filePath, { start: nextOffset, end: stat.size - 1 });
         stream.on('data', (chunk: Buffer | string) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
         stream.on('end', resolve);
         stream.on('error', reject);
       });
       const newData = Buffer.concat(chunks);
-      const chunkText = newData.toString('utf8');
 
       // Handle partial lines: only process complete lines (ending with \n)
-      const lastNewline = chunkText.lastIndexOf('\n');
+      const lastNewline = newData.lastIndexOf(10);
       if (lastNewline === -1) {
         // No complete line yet — don't advance offset
         return;
       }
-      const completeText = chunkText.slice(0, lastNewline);
+      let start = 0;
+      if (this.discardPartial.delete(filePath)) start = newData.indexOf(10) + 1;
+      const completeText = newData.subarray(start, lastNewline).toString('utf8');
       const lines = completeText.split('\n').filter((line) => line.trim().length > 0);
+
+      // Commit byte offsets before emitting so re-entrant change delivery is safe.
+      this.fileOffsets.set(filePath, nextOffset + lastNewline + 1);
+      this.checkpoints.set(filePath, await this.readCheckpoint(filePath, nextOffset + lastNewline + 1));
 
       for (const line of lines) {
         const payload: WatchLinePayload = { line, sessionId, agentId, filePath };
         this.emit('line', payload);
       }
 
-      // Advance offset past the processed data (including the trailing \n)
-      this.fileOffsets.set(filePath, nextOffset + lastNewline + 1);
     } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
       this.emit('error', error as Error);
+    }
+  }
+
+  private async readCheckpoint(filePath: string, offset: number): Promise<Buffer> {
+    const handle = await fs.open(filePath, 'r');
+    try {
+      const buffer = Buffer.alloc(Math.min(offset, 64));
+      const { bytesRead } = await handle.read(buffer, 0, buffer.length, offset - buffer.length);
+      return buffer.subarray(0, bytesRead);
+    } finally {
+      await handle.close();
     }
   }
 }

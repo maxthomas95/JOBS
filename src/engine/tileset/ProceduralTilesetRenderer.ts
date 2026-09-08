@@ -31,15 +31,17 @@ export class ProceduralTilesetRenderer implements TilesetRenderer {
     const { stations } = mapConfig;
 
     // Desks
-    for (const desk of stations.desks) {
+    for (const [index, desk] of stations.desks.entries()) {
       const x = desk.x * ts;
-      const y = desk.y * ts;
+      const upperSeat = index < 16 && Math.floor(index / 4) % 2 === 0;
+      const y = (desk.y + (upperSeat ? 1 : -1)) * ts;
       g.rect(x, y, ts * 2, ts).fill(0x6f4e37);
       g.rect(x + 3, y + 3, ts - 6, ts - 6).fill(0x89a8c7);
+      g.rect(x + 4, desk.y * ts + 4, ts - 8, ts - 8).fill(0x495369);
     }
 
     // Whiteboard
-    g.rect(stations.whiteboard.x * ts, stations.whiteboard.y * ts, ts * 3, ts).fill(0x8ea4b8);
+    g.rect(stations.whiteboard.x * ts, (stations.whiteboard.y + 1) * ts, ts, ts).fill(0x8ea4b8);
 
     // Terminal
     g.rect(stations.terminal.x * ts, stations.terminal.y * ts, ts * 2, ts).fill(0x111722);
@@ -51,10 +53,10 @@ export class ProceduralTilesetRenderer implements TilesetRenderer {
     ).stroke({ color: 0x2ee65e, width: 1 });
 
     // Library / bookshelf
-    g.rect(stations.library.x * ts, stations.library.y * ts, ts * 3, ts).fill(0x5c3a1e);
-    g.rect(stations.library.x * ts + 2, stations.library.y * ts + 3, ts - 4, ts - 6).fill(0xd4a574);
-    g.rect(stations.library.x * ts + ts + 2, stations.library.y * ts + 3, ts - 4, ts - 6).fill(0xc49a6c);
-    g.rect(stations.library.x * ts + ts * 2 + 2, stations.library.y * ts + 3, ts - 4, ts - 6).fill(0xb8906a);
+    g.rect(ts, ts * 2, ts, ts * 3).fill(0x5c3a1e);
+    for (let row = 0; row < 3; row++) {
+      g.rect(ts + 2, (row + 2) * ts + 3, ts - 4, ts - 6).fill(0xd4a574);
+    }
 
     // Coffee machine
     g.rect(stations.coffee.x * ts, stations.coffee.y * ts, ts * 2, ts).fill(0x3d2b1f);

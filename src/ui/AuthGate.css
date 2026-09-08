@@ -1,0 +1,7 @@
+.auth-page{min-height:100dvh;background:#151d2b;color:#eef3fb;display:grid;place-items:center;padding:24px;font-family:'Segoe UI',system-ui,sans-serif}
+.auth-card{width:min(100%,440px);background:#1d293a;border:1px solid #33455e;border-radius:14px;padding:32px}
+.auth-wordmark{font:700 22px Consolas,monospace;color:#79b8ef;margin-bottom:28px;letter-spacing:.08em}
+.auth-card h1{font-size:25px;line-height:1.25;margin:0 0 16px}.auth-card p{color:#b6c5d8;line-height:1.6;font-size:15px}
+.auth-card label{display:block;margin:24px 0 8px;font-size:14px}.auth-card input{box-sizing:border-box;width:100%;height:46px;background:#151d2b;color:#eef3fb;border:1px solid #516681;border-radius:7px;padding:10px;font:inherit}
+.auth-card button{min-height:44px;background:#79b8ef;color:#13253b;border:0;border-radius:7px;padding:10px 18px;font:600 15px 'Segoe UI',sans-serif;cursor:pointer;margin-top:16px}.auth-card form button{width:100%}.auth-card button:disabled{opacity:.6;cursor:wait}
+.auth-card :focus-visible{outline:3px solid #efb75b;outline-offset:3px}.auth-card [role=alert]{color:#ffd49c}

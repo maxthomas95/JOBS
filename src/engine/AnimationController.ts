@@ -7,8 +7,10 @@ import { AmbientEffects } from './AmbientEffects.js';
 import type { DayNightCycle } from './DayNightCycle.js';
 import type { FollowMode } from './FollowMode.js';
 import { audioManager } from '../audio/AudioManager.js';
+import { prefersReducedMotion } from '../state/useMotionStore.js';
 
 export class AnimationController {
+  private destroyed = false;
   private unsubscribe: (() => void) | null = null;
   private unsubscribeDayNight: (() => void) | null = null;
   private ticker: Ticker | null = null;
@@ -33,6 +35,7 @@ export class AnimationController {
   async init(): Promise<void> {
     this.spriteManager = new AgentSpriteManager(this.layer);
     await this.spriteManager.loadSpritesheets();
+    if (this.destroyed) return;
 
     this.ambientEffects = new AmbientEffects(this.ambientLayer);
     this.ambientEffects.init();
@@ -68,13 +71,17 @@ export class AnimationController {
   }
 
   destroy(): void {
+    if (this.destroyed) return;
+    this.destroyed = true;
     this.unsubscribe?.();
     this.unsubscribeDayNight?.();
     if (this.ticker) {
       this.ticker.remove(this.onTick);
     }
     this.ambientEffects?.destroy();
+    this.spriteManager?.destroy();
     this.followMode?.destroy();
+    audioManager.stopAllLoops();
   }
 
   private readonly onTick = (ticker: Ticker): void => {
@@ -84,7 +91,9 @@ export class AnimationController {
     const agents = useOfficeStore.getState().agents;
     const deltaSeconds = Math.min(ticker.deltaMS / 1000, 0.1);
     this.dayNightCycle?.update(deltaSeconds);
-    this.ambientEffects?.update(deltaSeconds, agents);
+    const reducedMotion = prefersReducedMotion();
+    this.ambientLayer.visible = !reducedMotion;
+    if (!reducedMotion) this.ambientEffects?.update(deltaSeconds, agents);
     this.spriteManager.update(deltaSeconds, agents);
     this.updateAudioLoops(ticker.deltaMS, agents);
 

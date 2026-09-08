@@ -1,271 +1,142 @@
 #!/usr/bin/env node
-/**
- * J.O.B.S. hook setup script.
- *
- * Reads ~/.claude/settings.json, merges the JOBS hook configuration,
- * and writes it back. Detects platform to choose the right notify script.
- *
- * Usage:
- *   node server/setup-hooks.js          # install Claude Code hooks
- *   node server/setup-hooks.js --codex  # install Codex CLI notify hook
- *   node server/setup-hooks.js --remove  # remove JOBS hooks
- *
- * Environment variables:
- *   JOBS_URL  — JOBS server URL (default: http://localhost:8780)
- */
-
-import { readFileSync, writeFileSync, mkdirSync, copyFileSync, chmodSync, existsSync, unlinkSync } from 'node:fs';
+// Install only JOBS-owned command handlers. Never edit Codex config.toml or replace notify.
+import { readFileSync, writeFileSync, mkdirSync, copyFileSync, existsSync, renameSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { randomUUID } from 'node:crypto';
 
-const SETTINGS_PATH = join(homedir(), '.claude', 'settings.json');
-const HOOKS_DIR = join(homedir(), '.claude', 'hooks');
-const CODEX_CONFIG_PATH = join(homedir(), '.codex', 'config.toml');
-const JOBS_URL = process.env.JOBS_URL || 'http://localhost:8780';
-const isWindows = process.platform === 'win32';
-const removeMode = process.argv.includes('--remove');
-const codexMode = process.argv.includes('--codex');
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const CODEX_EVENTS = ['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'PermissionRequest', 'PreCompact', 'PostCompact', 'Stop', 'Interrupt', 'SessionEnd', 'SubagentStart', 'SubagentStop'];
+const CLAUDE_EVENTS = ['Stop', 'SubagentStart', 'SubagentStop', 'Notification', 'PreCompact', 'SessionStart', 'SessionEnd', 'TeammateIdle', 'TaskCompleted'];
 
-// Source hook scripts (relative to this file's directory)
-const projectRoot = resolve(import.meta.dirname, '..');
-const srcShScript = join(projectRoot, 'server', 'hooks', 'jobs-notify.sh');
-const srcJsScript = join(projectRoot, 'server', 'hooks', 'jobs-notify.js');
-const srcCodexScript = join(projectRoot, 'server', 'hooks', 'codex-notify.js');
-
-// Destination paths
-const destShScript = join(HOOKS_DIR, 'jobs-notify.sh');
-const destJsScript = join(HOOKS_DIR, 'jobs-notify.js');
-const destCodexScript = join(HOOKS_DIR, 'codex-notify.js');
-
-// Build the hook command based on platform
-function getHookCommand() {
-  if (isWindows) {
-    // Windows: use Node.js script directly
-    return `node "${destJsScript}"`;
+function options(args) {
+  const result = { codex: false, remove: false, dryRun: false, check: false };
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === '--codex') result.codex = true;
+    else if (arg === '--remove') result.remove = true;
+    else if (arg === '--dry-run') result.dryRun = true;
+    else if (arg === '--check') result.check = true;
+    else if (['--home', '--codex-home', '--claude-home', '--url'].includes(arg)) {
+      if (!args[i + 1] || args[i + 1].startsWith('--')) throw new Error(`Missing value for ${arg}`);
+      result[arg.slice(2)] = args[++i];
+    } else throw new Error(`Unknown option: ${arg}`);
   }
-  // Unix: prefer bash script (lighter), fall back to node
-  return `"${destShScript}"`;
+  if (result.check && (result.remove || result.dryRun)) throw new Error('--check cannot be combined with --remove or --dry-run');
+  if (result.check && !result.codex) throw new Error('--check currently supports --codex; see docs/codex.md');
+  return result;
 }
 
-// All hook events we want to subscribe to
-const HOOK_EVENTS = [
-  'Stop',
-  'SubagentStart',
-  'SubagentStop',
-  'Notification',
-  'PreCompact',
-  'SessionStart',
-  'SessionEnd',
-  'TeammateIdle',
-  'TaskCompleted',
-];
-
-function buildHooksConfig(command) {
-  const hooks = {};
-  for (const event of HOOK_EVENTS) {
-    const entry = {
-      hooks: [
-        {
-          type: 'command',
-          command,
-          async: true,
-          timeout: 5,
-          statusMessage: 'Notifying J.O.B.S. office...',
-        },
-      ],
-    };
-    // Add matcher for Notification to only fire on permission_prompt
-    if (event === 'Notification') {
-      entry.matcher = 'permission_prompt';
+function jsonFile(path) {
+  if (!existsSync(path)) return {};
+  let data;
+  try { data = JSON.parse(readFileSync(path, 'utf8')); }
+  catch { throw new Error(`Cannot parse ${path}; existing file was not changed.`); }
+  if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error(`Expected a JSON object in ${path}; existing file was not changed.`);
+  if (data.hooks !== undefined) {
+    if (!data.hooks || typeof data.hooks !== 'object' || Array.isArray(data.hooks)) throw new Error(`Invalid hooks object in ${path}`);
+    for (const entries of Object.values(data.hooks)) {
+      if (!Array.isArray(entries) || entries.some(entry => !entry || !Array.isArray(entry.hooks))) throw new Error(`Invalid hook entries in ${path}; existing file was not changed.`);
     }
-    hooks[event] = hooks[event] || [];
-    hooks[event].push(entry);
   }
-  return hooks;
+  return data;
 }
 
-function readSettings() {
+function writeChanged(path, content, dryRun) {
+  if (existsSync(path) && readFileSync(path, 'utf8') === content) return false;
+  console.log(`[setup-hooks] ${dryRun ? 'Would write' : 'Writing'} ${path}`);
+  if (dryRun) return true;
+  mkdirSync(dirname(path), { recursive: true });
+  if (existsSync(path)) {
+    const backup = `${path}.jobs-backup-${Date.now()}-${randomUUID().slice(0, 8)}`;
+    copyFileSync(path, backup);
+    console.log(`[setup-hooks] Backup: ${backup}`);
+  }
+  const temp = `${path}.jobs-${randomUUID()}.tmp`;
+  writeFileSync(temp, content, { encoding: 'utf8', mode: 0o600 });
+  renameSync(temp, path);
+  return true;
+}
+
+// Quote Unix paths literally. A Node loader on Windows avoids shell-specific
+// quoting/expansion of arbitrary config paths and the startup cost of another shell.
+function shellLiteral(value) { return `'${value.replace(/'/g, `'"'"'`)}'`; }
+
+async function main() {
+  const opts = options(process.argv.slice(2));
+  const configHome = resolve(opts[opts.codex ? 'codex-home' : 'claude-home'] || opts.home ||
+    (opts.codex ? process.env.CODEX_HOME : process.env.CLAUDE_CONFIG_DIR) || join(homedir(), opts.codex ? '.codex' : '.claude'));
+  const configPath = join(configHome, opts.codex ? 'hooks.json' : 'settings.json');
+  const scriptName = opts.codex ? 'codex-hook-notify.js' : 'jobs-notify.js';
+  const scriptPath = join(configHome, 'hooks', scriptName);
+  const transportPath = join(configHome, 'hooks', 'codex-transport.json');
+  const marker = opts.codex ? '--jobs-codex-observer-v1' : '--jobs-claude-observer-v1';
+  const command = `${shellLiteral(process.execPath)} ${shellLiteral(scriptPath)} ${marker}`;
+  const encodedPath = Buffer.from(scriptPath, 'utf8').toString('base64');
+  const commandWindows = `node.exe -e "process.argv[1]=Buffer.from('${encodedPath}','base64').toString();import(require('node:url').pathToFileURL(process.argv[1]).href)" -- ${marker}`;
+  let url;
   try {
-    const raw = readFileSync(SETTINGS_PATH, 'utf-8');
-    return JSON.parse(raw);
-  } catch {
-    return {};
-  }
-}
-
-function writeSettings(settings) {
-  mkdirSync(join(homedir(), '.claude'), { recursive: true });
-  writeFileSync(SETTINGS_PATH, JSON.stringify(settings, null, 2) + '\n', 'utf-8');
-}
-
-/** Check if a hook entry was created by JOBS (by checking the command) */
-function isJobsHook(hookEntry) {
-  return hookEntry?.hooks?.some(
-    (h) => h.command?.includes('jobs-notify')
-  );
-}
-
-/** Remove all JOBS-created hooks from settings */
-function removeJobsHooks(settings) {
-  if (!settings.hooks) return settings;
-  for (const event of Object.keys(settings.hooks)) {
-    settings.hooks[event] = settings.hooks[event].filter((entry) => !isJobsHook(entry));
-    if (settings.hooks[event].length === 0) {
-      delete settings.hooks[event];
-    }
-  }
-  if (Object.keys(settings.hooks).length === 0) {
-    delete settings.hooks;
-  }
-  return settings;
-}
-
-function copyScripts() {
-  mkdirSync(HOOKS_DIR, { recursive: true });
-
-  if (existsSync(srcShScript)) {
-    copyFileSync(srcShScript, destShScript);
-    if (!isWindows) {
-      try { chmodSync(destShScript, 0o755); } catch { /* ignore */ }
-    }
-  }
-
-  if (existsSync(srcJsScript)) {
-    copyFileSync(srcJsScript, destJsScript);
-  }
-}
-
-function removeScripts() {
-  for (const p of [destShScript, destJsScript]) {
+    const existingUrl = opts.codex && existsSync(transportPath) ? jsonFile(transportPath).url : undefined;
+    url = new URL(opts.url || process.env.JOBS_URL || existingUrl || 'http://localhost:8780');
+    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash) throw new Error();
+  } catch { throw new Error('Use an HTTP(S) JOBS URL without credentials, query parameters, or fragments.'); }
+  const data = jsonFile(configPath);
+  const before = JSON.stringify(data);
+  const owned = handler => {
+    if (typeof handler?.command !== 'string') return false;
+    if (handler.command.endsWith(` ${marker}`)) return true;
+    // Recognize only the old installer destination, not another integration's similarly named script.
+    const legacyPaths = [scriptPath, join(configHome, 'hooks', 'jobs-notify.sh')];
+    return !opts.codex && legacyPaths.some(path => handler.command === `node "${path}"` || handler.command === `"${path}"`);
+  };
+  const installed = Object.values(data.hooks || {}).flat().some(entry => entry.hooks.some(owned));
+  if (opts.check) {
+    console.log(`[setup-hooks] Codex handlers: ${installed ? 'installed' : 'not installed in selected home'}`);
+    const headers = { 'Content-Type': 'application/json' };
+    const token = process.env.JOBS_TOKEN || process.env.WEBHOOK_TOKEN;
+    if (token) headers.Authorization = `Bearer ${token}`;
+    let response;
     try {
-      if (existsSync(p)) {
-        unlinkSync(p);
-      }
-    } catch { /* ignore */ }
+      response = await fetch(`${url.href.replace(/\/$/, '')}/api/codex/hooks`, {
+        method: 'POST', headers, body: JSON.stringify({ diagnostic: 'jobs-delivery-check-v1' }), signal: AbortSignal.timeout(3000),
+      });
+    } catch { throw new Error('Server could not be reached within 3 seconds. Start JOBS and check --url/JOBS_URL and the port.'); }
+    if (response.status === 401 || response.status === 403) throw new Error('Authentication failed. Export JOBS_TOKEN to match the JOBS server; credentials were not printed.');
+    if (!response.ok) throw new Error(`Delivery returned HTTP ${response.status}. Check JOBS URL and that the server supports Codex hooks.`);
+    const result = await response.json().catch(() => null);
+    if (result?.diagnostic !== 'jobs-delivery-check-v1') throw new Error('Unexpected server response. Verify the URL targets JOBS.');
+    console.log('[setup-hooks] Synthetic delivery passed; no agent or session statistics were created.');
+    console.log('[setup-hooks] Review hook trust in Codex, then start a session to verify real lifecycle delivery.');
+    return;
   }
-}
-
-// --- Codex Config Helpers ---
-
-function readCodexConfig() {
-  try {
-    return readFileSync(CODEX_CONFIG_PATH, 'utf-8');
-  } catch {
-    return '';
+  for (const [event, entries] of Object.entries(data.hooks || {})) {
+    const remaining = entries.map(entry => ({ ...entry, hooks: entry.hooks.filter(handler => !owned(handler)) })).filter(entry => entry.hooks.length);
+    if (remaining.length) data.hooks[event] = remaining;
+    else delete data.hooks[event];
   }
-}
-
-function writeCodexConfig(content) {
-  mkdirSync(join(homedir(), '.codex'), { recursive: true });
-  writeFileSync(CODEX_CONFIG_PATH, content, 'utf-8');
-}
-
-/** Remove the JOBS notify line from Codex config */
-function removeCodexNotify(content) {
-  return content
-    .split('\n')
-    .filter((line) => !line.includes('codex-notify'))
-    .join('\n');
-}
-
-function setupCodex() {
-  // Copy codex-notify.js to hooks dir
-  mkdirSync(HOOKS_DIR, { recursive: true });
-  if (existsSync(srcCodexScript)) {
-    copyFileSync(srcCodexScript, destCodexScript);
+  if (!opts.remove) {
+    data.hooks ||= {};
+    for (const event of opts.codex ? CODEX_EVENTS : CLAUDE_EVENTS) {
+      const handler = {
+        type: 'command', command: opts.codex ? command : process.platform === 'win32' ? `"${process.execPath}" "${scriptPath}" ${marker}` : command,
+        ...(opts.codex ? { commandWindows } : {}),
+        async: event !== 'SessionEnd', timeout: 3,
+      };
+      const entry = { ...(event === 'Notification' ? { matcher: 'permission_prompt' } : {}), hooks: [handler] };
+      (data.hooks[event] ||= []).push(entry);
+    }
+    // Validate/read everything before the first write, so malformed configuration never gets overwritten.
+    const script = readFileSync(join(ROOT, 'server', 'hooks', scriptName), 'utf8');
+    writeChanged(scriptPath, script, opts.dryRun);
+    if (opts.codex) writeChanged(transportPath, JSON.stringify({ url: url.href.replace(/\/$/, '') }, null, 2) + '\n', opts.dryRun);
   }
-
-  // Read existing config.toml
-  let config = readCodexConfig();
-
-  // Remove any existing JOBS notify line
-  config = removeCodexNotify(config);
-
-  // Build the notify command
-  const notifyCmd = `notify = ["node", "${destCodexScript.replace(/\\/g, '/')}"]`;
-
-  // Check if there's already a notify line
-  const hasNotify = config.split('\n').some((line) => line.trim().startsWith('notify'));
-  if (hasNotify) {
-    // Replace existing notify line
-    config = config
-      .split('\n')
-      .map((line) => (line.trim().startsWith('notify') ? notifyCmd : line))
-      .join('\n');
-  } else {
-    // Add at the top (before any section headers)
-    config = notifyCmd + '\n' + config;
-  }
-
-  writeCodexConfig(config);
-
-  console.log('[setup-hooks] Codex notify hook configured in', CODEX_CONFIG_PATH);
-  console.log('[setup-hooks] Command:', notifyCmd);
-  console.log('[setup-hooks] JOBS URL:', JOBS_URL);
-  console.log('');
-  console.log('[setup-hooks] Done! Restart Codex for the hook to take effect.');
-  console.log('[setup-hooks] To remove: node server/setup-hooks.js --remove');
+  if (data.hooks && !Object.keys(data.hooks).length) delete data.hooks;
+  if (before !== JSON.stringify(data)) writeChanged(configPath, JSON.stringify(data, null, 2) + '\n', opts.dryRun);
+  console.log(`[setup-hooks] ${opts.dryRun ? 'Dry run complete' : opts.remove ? 'JOBS handlers removed' : 'JOBS handlers installed'} (${opts.codex ? 'Codex' : 'Claude'}).`);
+  if (opts.codex) console.log('[setup-hooks] config.toml and existing notify commands were preserved. Review hook trust in Codex after installation.');
+  if (opts.remove) console.log('[setup-hooks] Scripts and backups are retained so existing references remain valid.');
+  else if (!opts.dryRun && opts.codex) console.log('[setup-hooks] Verify delivery: node server/setup-hooks.js --codex --check (with the same home/URL options).');
 }
 
-// --- Main ---
-
-if (removeMode) {
-  console.log('[setup-hooks] Removing J.O.B.S. hooks...');
-  const settings = readSettings();
-  removeJobsHooks(settings);
-  writeSettings(settings);
-  removeScripts();
-  // Also remove Codex notify if present
-  const codexConfig = readCodexConfig();
-  if (codexConfig.includes('codex-notify')) {
-    writeCodexConfig(removeCodexNotify(codexConfig));
-    console.log('[setup-hooks] Codex notify hook removed from', CODEX_CONFIG_PATH);
-  }
-  try { if (existsSync(destCodexScript)) unlinkSync(destCodexScript); } catch { /* ignore */ }
-  console.log('[setup-hooks] Hooks removed from', SETTINGS_PATH);
-  process.exit(0);
-}
-
-if (codexMode) {
-  setupCodex();
-  process.exit(0);
-}
-
-console.log('[setup-hooks] Setting up J.O.B.S. Claude Code hooks...');
-console.log(`[setup-hooks] Platform: ${process.platform}`);
-console.log(`[setup-hooks] JOBS URL: ${JOBS_URL}`);
-
-// 1. Copy notify scripts to ~/.claude/hooks/
-copyScripts();
-console.log('[setup-hooks] Copied notify scripts to', HOOKS_DIR);
-
-// 2. Read existing settings
-const settings = readSettings();
-
-// 3. Remove any existing JOBS hooks (clean merge)
-removeJobsHooks(settings);
-
-// 4. Build and merge new hooks config
-const command = getHookCommand();
-const newHooks = buildHooksConfig(command);
-
-if (!settings.hooks) {
-  settings.hooks = {};
-}
-
-for (const [event, entries] of Object.entries(newHooks)) {
-  if (!settings.hooks[event]) {
-    settings.hooks[event] = [];
-  }
-  settings.hooks[event].push(...entries);
-}
-
-// 5. Write settings
-writeSettings(settings);
-
-console.log('[setup-hooks] Hooks configured in', SETTINGS_PATH);
-console.log('[setup-hooks] Hook events:', HOOK_EVENTS.join(', '));
-console.log('[setup-hooks] Command:', command);
-console.log('');
-console.log('[setup-hooks] Done! Restart Claude Code for hooks to take effect.');
-console.log('[setup-hooks] To remove: node server/setup-hooks.js --remove');
+main().catch(error => { console.error(`[setup-hooks] ${error.message}`); process.exitCode = 1; });

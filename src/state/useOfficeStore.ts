@@ -118,6 +118,31 @@ let focusTimer: ReturnType<typeof setTimeout> | null = null;
 let notificationPermissionRequested = false;
 /** Timers for agents in 'leaving' state — cleared if agent is resurrected */
 const leavingTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const seenEventIds = new Set<string>();
+
+function reconcileRoster(state: OfficeState, agents: Map<string, Agent>): Partial<OfficeState> {
+  for (const [id, timer] of leavingTimers) {
+    if (!agents.has(id) || agents.get(id)?.state !== 'leaving') {
+      clearTimeout(timer);
+      leavingTimers.delete(id);
+    }
+  }
+  if (state.focusedAgentId && !agents.has(state.focusedAgentId) && focusTimer) {
+    clearTimeout(focusTimer);
+    focusTimer = null;
+  }
+  return {
+    agents,
+    agentHistory: new Map([...state.agentHistory].filter(([id]) => agents.has(id))),
+    agentToolCounts: new Map([...state.agentToolCounts].filter(([id]) => agents.has(id))),
+    agentToolTime: new Map([...state.agentToolTime].filter(([id]) => agents.has(id))),
+    pendingToolStarts: new Map([...state.pendingToolStarts].filter(([key]) => agents.has(key.split('\0')[0]))),
+    selectedAgentId: state.selectedAgentId && agents.has(state.selectedAgentId) ? state.selectedAgentId : null,
+    followedAgentId: state.followedAgentId && agents.has(state.followedAgentId) ? state.followedAgentId : null,
+    focusedAgentId: state.focusedAgentId && agents.has(state.focusedAgentId) ? state.focusedAgentId : null,
+    focusedAgentIds: new Set([...state.focusedAgentIds].filter(id => agents.has(id))),
+  };
+}
 
 function sendBrowserNotification(body: string) {
   if (typeof Notification === 'undefined') return;
@@ -166,36 +191,10 @@ export const useOfficeStore = create<OfficeState>()(
     },
 
     removeAgent: (id) => {
-      // Clear leaving timer if any
-      const timer = leavingTimers.get(id);
-      if (timer) {
-        clearTimeout(timer);
-        leavingTimers.delete(id);
-      }
       set((state) => {
-        if (!state.agents.has(id)) {
-          return state;
-        }
-        const next = new Map(state.agents);
-        next.delete(id);
-        // Clean up per-agent tracking Maps
-        const nextHistory = new Map(state.agentHistory);
-        nextHistory.delete(id);
-        const nextToolCounts = new Map(state.agentToolCounts);
-        nextToolCounts.delete(id);
-        const nextToolTime = new Map(state.agentToolTime);
-        nextToolTime.delete(id);
-        // Auto-unfollow if the removed agent was being followed
-        const patch: Partial<OfficeState> = {
-          agents: next,
-          agentHistory: nextHistory,
-          agentToolCounts: nextToolCounts,
-          agentToolTime: nextToolTime,
-        };
-        if (state.followedAgentId === id) {
-          patch.followedAgentId = null;
-        }
-        return patch;
+        const agents = new Map(state.agents);
+        agents.delete(id);
+        return reconcileRoster(state, agents);
       });
     },
 
@@ -203,12 +202,11 @@ export const useOfficeStore = create<OfficeState>()(
       const state = get();
       const prevAgents = state.agents;
       const map = new Map<string, Agent>();
-      const nextHistory = new Map(state.agentHistory);
+      const nextHistory = new Map([...state.agentHistory].filter(([id]) => agents.some(agent => agent.id === id)));
       for (const agent of agents) {
-        // Recalculate targetPosition using client-side STATIONS
-        // (server stations may differ from the active map renderer)
+        // Geometry is shared; preserve the authoritative destination when supplied.
         const recalcTarget = targetFor(agent, agent.state);
-        map.set(agent.id, { ...agent, targetPosition: recalcTarget });
+        map.set(agent.id, { ...agent, targetPosition: agent.targetPosition ?? recalcTarget });
         const prev = prevAgents.get(agent.id);
         // Cancel leaving timer if agent reappears in snapshot as non-leaving
         if (prev?.state === 'leaving' && agent.state !== 'leaving') {
@@ -219,9 +217,9 @@ export const useOfficeStore = create<OfficeState>()(
           }
         }
         // Record state change in history when snapshot introduces a new state
-        if (prev && agent.state !== prev.state) {
-          const history = nextHistory.get(agent.id) ?? [];
-          history.push({ state: agent.state, timestamp: Date.now() });
+        if (!prev || agent.state !== prev.state) {
+          const history = [...(nextHistory.get(agent.id) ?? [])];
+          history.push({ state: agent.state, timestamp: agent.stateChangedAt });
           if (history.length > 200) {
             history.splice(0, history.length - 200);
           }
@@ -236,7 +234,7 @@ export const useOfficeStore = create<OfficeState>()(
           }
         }
       }
-      const patch: Partial<OfficeState> = { agents: map, agentHistory: nextHistory };
+      const patch: Partial<OfficeState> = { ...reconcileRoster(state, map), agentHistory: nextHistory };
       if (machines) {
         const machineMap = new Map<string, MachineInfo>();
         for (const m of machines) {
@@ -248,6 +246,9 @@ export const useOfficeStore = create<OfficeState>()(
     },
 
     handleEvent: (event) => {
+      if (seenEventIds.has(event.id)) return;
+      seenEventIds.add(event.id);
+      if (seenEventIds.size > 4000) seenEventIds.delete(seenEventIds.values().next().value!);
       const state = get();
       const existing = state.agents.get(event.sessionId);
 
@@ -264,6 +265,9 @@ export const useOfficeStore = create<OfficeState>()(
             : tileToWorld(STATIONS.door),
           deskIndex: event.deskIndex ?? null,
           lastEventAt: event.timestamp,
+          startedAt: event.startedAt ?? event.timestamp,
+          integrationMode: event.integrationMode ?? 'transcript',
+          model: event.model,
           stateChangedAt: event.timestamp,
           activityText: null,
           name: event.name ?? null,
@@ -272,7 +276,7 @@ export const useOfficeStore = create<OfficeState>()(
           waitingForHuman: false,
           parentId,
           childIds: [],
-          provider: 'claude',
+          provider: event.provider ?? 'claude',
           machineId: null,
           machineName: null,
           sourceType: null,
@@ -303,13 +307,16 @@ export const useOfficeStore = create<OfficeState>()(
       }
 
       const patch: Partial<Agent> = {
-        lastEventAt: event.timestamp,
+        lastEventAt: Math.max(existing.lastEventAt, event.timestamp),
         waitingForHuman: false,
       };
 
       if (event.type === 'session') {
         if (event.action === 'started') {
-          patch.state = 'entering';
+          patch.state = existing.state === 'leaving' ? 'entering' : existing.state;
+          patch.startedAt = event.startedAt ?? existing.startedAt;
+          patch.integrationMode = event.integrationMode ?? existing.integrationMode;
+          patch.provider = event.provider ?? existing.provider;
           patch.targetPosition = targetFor(existing, 'entering');
         } else {
           patch.state = 'leaving';
@@ -318,6 +325,7 @@ export const useOfficeStore = create<OfficeState>()(
           const existingTimer = leavingTimers.get(existing.id);
           if (existingTimer) clearTimeout(existingTimer);
           const leavingTimer = setTimeout(() => {
+            if (leavingTimers.get(existing.id) !== leavingTimer || get().agents.get(existing.id)?.state !== 'leaving') return;
             leavingTimers.delete(existing.id);
             get().removeAgent(existing.id);
           }, 2000);
@@ -336,6 +344,7 @@ export const useOfficeStore = create<OfficeState>()(
           patch.state = 'waiting';
           patch.targetPosition = tileToWorld(STATIONS.coffee);
           patch.activityText = 'Waiting...';
+          patch.waitingForHuman = true;
         } else if (event.action === 'user_prompt') {
           // Human sent a message — transition to thinking immediately
           patch.state = 'thinking';
@@ -345,6 +354,7 @@ export const useOfficeStore = create<OfficeState>()(
           patch.state = 'needsApproval';
           patch.targetPosition = targetFor(existing, 'needsApproval');
           patch.activityText = 'Needs approval';
+          patch.waitingForHuman = true;
         } else if (event.action === 'compacting') {
           patch.state = 'compacting';
           patch.targetPosition = targetFor(existing, 'compacting');
@@ -377,10 +387,10 @@ export const useOfficeStore = create<OfficeState>()(
             leavingTimers.delete(existing.id);
           }
         }
-        patch.stateChangedAt = Date.now();
+        patch.stateChangedAt = event.timestamp;
         // Track state history
-        const history = state.agentHistory.get(existing.id) ?? [];
-        history.push({ state: patch.state, timestamp: Date.now() });
+        const history = [...(state.agentHistory.get(existing.id) ?? [])];
+        history.push({ state: patch.state, timestamp: event.timestamp });
         if (history.length > 200) {
           history.splice(0, history.length - 200);
         }
@@ -392,7 +402,7 @@ export const useOfficeStore = create<OfficeState>()(
       // Track tool counts and time
       if (event.type === 'tool') {
         if (event.status === 'started') {
-          const counts = state.agentToolCounts.get(existing.id) ?? new Map<string, number>();
+          const counts = new Map(state.agentToolCounts.get(existing.id));
           counts.set(event.tool, (counts.get(event.tool) ?? 0) + 1);
           const nextCounts = new Map(state.agentToolCounts);
           nextCounts.set(existing.id, counts);
@@ -400,16 +410,15 @@ export const useOfficeStore = create<OfficeState>()(
 
           // Record start time for duration tracking
           const nextPending = new Map(state.pendingToolStarts);
-          const key = event.toolUseId ?? `${existing.id}:${event.tool}:${event.timestamp}`;
-          nextPending.set(key, event.timestamp);
+          if (event.toolUseId) nextPending.set(`${existing.id}\0${event.toolUseId}`, event.timestamp);
           storePatch.pendingToolStarts = nextPending;
         } else if (event.status === 'completed' || event.status === 'error') {
           // Compute elapsed time from matching start
-          const key = event.toolUseId ?? '';
+          const key = `${existing.id}\0${event.toolUseId ?? ''}`;
           const startTime = state.pendingToolStarts.get(key);
-          if (startTime) {
-            const elapsed = event.timestamp - startTime;
-            const times = state.agentToolTime.get(existing.id) ?? new Map<string, number>();
+          if (startTime !== undefined) {
+            const elapsed = Math.max(0, event.timestamp - startTime);
+            const times = new Map(state.agentToolTime.get(existing.id));
             times.set(event.tool, (times.get(event.tool) ?? 0) + elapsed);
             const nextTimes = new Map(state.agentToolTime);
             nextTimes.set(existing.id, times);
@@ -426,6 +435,9 @@ export const useOfficeStore = create<OfficeState>()(
       nextAgents.set(existing.id, { ...existing, ...patch });
       storePatch.agents = nextAgents;
       set(storePatch);
+      if (patch.waitingForHuman && !existing.waitingForHuman && state.notificationsEnabled) {
+        sendBrowserNotification(`${existing.name || existing.id.slice(0, 8)} is waiting for your input`);
+      }
     },
 
     setGroupMode: (mode) => {
@@ -479,11 +491,8 @@ export const useOfficeStore = create<OfficeState>()(
     },
 
     clearAgents: () => {
-      set({
-        agents: new Map(),
-        followedAgentId: null,
-        selectedAgentId: null,
-      });
+      seenEventIds.clear();
+      set(state => ({ ...reconcileRoster(state, new Map()), machines: new Map() }));
     },
   })),
     { name: 'office' },

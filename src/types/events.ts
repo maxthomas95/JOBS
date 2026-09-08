@@ -1,4 +1,4 @@
-import type { Agent } from './agent.js';
+import type { Agent, IntegrationMode } from './agent.js';
 
 export interface BaseEvent {
   id: string;
@@ -18,6 +18,10 @@ export interface SessionEvent extends BaseEvent {
   name?: string;
   /** Session ID of the parent agent that spawned this one */
   parentId?: string | null;
+  startedAt?: number;
+  provider?: string;
+  integrationMode?: IntegrationMode;
+  model?: string;
 }
 
 export interface ActivityEvent extends BaseEvent {
@@ -57,6 +61,7 @@ export type PixelEvent =
   | SummaryEvent;
 
 export interface StatsSummary {
+  timezone?: 'UTC';
   sessionsToday: number;
   totalSessions: number;
   totalHours: number;

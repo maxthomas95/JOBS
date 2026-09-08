@@ -1,94 +1,23 @@
 #!/usr/bin/env node
-// J.O.B.S. Codex CLI notify script — receives Codex notification JSON as argv[1],
-// reformats it into a JOBS webhook POST payload. Designed to be used as a Codex
-// notify command in ~/.codex/config.toml.
-//
-// Usage in config.toml:
-//   notify = ["node", "/path/to/codex-notify.js"]
-//
-// All errors are silently swallowed so Codex's work is never blocked.
-
-const JOBS_URL = process.env.JOBS_URL || 'http://localhost:8780';
-const WEBHOOK_TOKEN = process.env.WEBHOOK_TOKEN || '';
-
+// Compatibility for an existing Codex `notify` command. Never forward assistant text or cwd.
 async function main() {
-  // Codex passes the JSON payload as a command-line argument
-  const raw = process.argv[2];
-  if (!raw) {
-    process.exit(0);
-  }
-
-  let payload;
-  try {
-    payload = JSON.parse(raw);
-  } catch {
-    process.exit(0);
-  }
-
-  const eventType = payload.type;
-  const threadId = payload['thread-id'] || 'codex-default';
-  const sourceId = `codex-${threadId}`;
-
-  // Strip sensitive content (assistant message may contain code/secrets)
-  const activity = payload['last-assistant-message']
-    ? payload['last-assistant-message'].slice(0, 80).replace(/[\n\r]+/g, ' ')
-    : undefined;
-
-  // Map Codex event types to JOBS webhook events
-  let webhookEvent;
-  let webhookState;
-
-  if (eventType === 'agent-turn-complete') {
-    webhookEvent = 'status';
-    webhookState = 'waiting';
-  } else {
-    // Unknown event type — send as status update
-    webhookEvent = 'status';
-    webhookState = 'running';
-  }
-
-  // Check if this agent already exists — if not, send start first
+  let data;
+  try { data = JSON.parse(process.argv[2] || ''); } catch { return; }
+  const id = value => typeof value === 'string' && /^[a-zA-Z0-9_-]{1,128}$/.test(value) ? value : undefined;
+  if (data?.type !== 'agent-turn-complete' || !id(data['thread-id'])) return;
+  const { randomUUID } = await import('node:crypto');
   const body = {
-    source_id: sourceId,
-    event: webhookEvent,
-    source_name: 'Codex CLI',
-    source_type: 'codex',
-    project: payload.cwd ? payload.cwd.split(/[/\\]/).pop() : undefined,
-    state: webhookState,
-    activity,
+    type: 'agent-turn-complete', 'thread-id': id(data['thread-id']), 'turn-id': id(data['turn-id']),
+    sent_at: Date.now(), event_id: randomUUID(),
   };
-
-  if (WEBHOOK_TOKEN) {
-    body.token = WEBHOOK_TOKEN;
-  }
-
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000);
-
-    // Try status update first
-    const res = await fetch(`${JOBS_URL}/api/webhooks`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    });
-
-    // If agent not found (404), register it first then retry
-    if (res.status === 404) {
-      body.event = 'start';
-      await fetch(`${JOBS_URL}/api/webhooks`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-        signal: controller.signal,
-      });
-    }
-
-    clearTimeout(timeout);
-  } catch {
-    // Silently fail — never block Codex
-  }
+  const url = new URL(process.env.JOBS_URL || 'http://localhost:8780');
+  if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) throw new Error('url');
+  const headers = { 'Content-Type': 'application/json' };
+  const token = process.env.JOBS_TOKEN || process.env.WEBHOOK_TOKEN;
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const response = await fetch(`${url.href.replace(/\/$/, '')}/api/codex/notify`, {
+    method: 'POST', headers, body: JSON.stringify(body), signal: AbortSignal.timeout(1500),
+  });
+  if (!response.ok) process.stderr.write(`[JOBS Codex] Notify returned HTTP ${response.status}; run setup-hooks.js --codex --check.\n`);
 }
-
-main().catch(() => process.exit(0));
+main().catch(() => process.stderr.write('[JOBS Codex] Notify unavailable; run setup-hooks.js --codex --check.\n'));

@@ -5,7 +5,7 @@
 
 ![J.O.B.S. Office](jarvis.png)
 
-A self-hosted, browser-based pixel-art office that visualizes Claude Code agent activity in real-time. Each active coding session spawns a character who moves between stations — coding at a desk, thinking at a whiteboard, running commands at a terminal, searching at a library, grabbing coffee on a break.
+A self-hosted pixel-art office for Claude Code and Codex activity, with a readable session rail, live office, inspector, and activity feed. Each active coding session spawns a character who moves between stations — coding at a desk, thinking at a whiteboard, running commands at a terminal, searching at a library, grabbing coffee on a break.
 
 Multiple simultaneous sessions = a bustling office. Perfect for developers running multiple Claude Code sessions, team leads monitoring sub-agent trees, or anyone who wants a living dashboard of their AI workforce.
 
@@ -25,12 +25,14 @@ Part of the [Jarvis](https://github.com/maxthomas95/homelab-jarvis) AI assistant
 - **Stats dashboard** — sessions today, total hours, files touched, tools used breakdown
 - **Webhook adapter** — accept events from any source (CI, deploy, monitoring) via HTTP POST
 - **Multi-instance** — watch multiple machines' Claude dirs, with machine grouping in the HUD
-- **OpenAI Codex support** — visualize Codex CLI sessions alongside Claude Code, with their own robot mascot
-- **Privacy first** — no code, file contents, or full paths ever leave the server
+- **Codex lifecycle hooks** — live tool categories, approval/waiting states, compaction, and subagents; legacy notify remains completion-only. [Setup and limits](docs/codex.md)
+- **Modern monitoring controls** — search and provider/state/attention filters, keyboard selection, responsive inspector, pauseable activity, settings, and kiosk mode
+- **Reduced motion** — respects the system preference in the controls and pixel renderer, with an explicit setting
+- **Metadata-only agent adapters** — transcripts, prompts, responses, commands, search patterns, and full paths stay out of browser events; generic webhook display labels remain caller-supplied
 
 ## How It Works
 
-J.O.B.S. has two data paths — both work independently, and they're better together.
+Claude Code has two complementary data paths. Codex uses its own supported lifecycle hooks; it does not depend on parsing Codex transcripts.
 
 ### Standard Mode (zero config, works out of the box)
 
@@ -56,7 +58,7 @@ Claude Code's [hooks system](https://docs.anthropic.com/en/docs/claude-code/hook
 - **"Needs Approval" state** — `Notification` hooks surface permission prompts as a visible agent state (currently invisible via JSONL)
 - **Context compaction awareness** — `PreCompact` hook shows when an agent is compressing its memory
 
-All hooks run as `async: true` so they never slow down Claude's work. See [Enhanced Mode Setup](#enhanced-mode-setup) below.
+Claude delivery runs asynchronously with a bounded timeout. Codex has event-specific timing requirements, documented in [Codex setup](docs/codex.md). Monitoring scripts emit no approval decisions.
 
 ## Quick Start
 
@@ -67,12 +69,12 @@ git clone https://github.com/maxthomas95/JOBS.git && cd JOBS
 docker compose up -d
 ```
 
-Open `http://localhost:8780`. The container mounts `~/.claude` read-only.
+Open `http://localhost:8780`. The container mounts your home `.claude` directory read-only and publishes only to loopback by default. Set `CLAUDE_DATA_DIR` for a different host directory. The runtime image excludes development dependencies.
 
 ### Local Development
 
 ```bash
-npm install
+npm ci
 npm run dev
 ```
 
@@ -100,15 +102,20 @@ All variables are optional. Copy `.env.example` to `.env` to customize.
 | Variable | Default | Description |
 |---|---|---|
 | `PORT` | `8780` | Server port |
+| `HOST` | `127.0.0.1` | Local server bind address; container uses `0.0.0.0` internally |
+| `ALLOWED_HOSTS` | _(loopback only)_ | Additional browser/proxy hostnames or IPs, comma-separated, without scheme or port |
+| `JOBS_BIND_ADDRESS` | `127.0.0.1` | Docker host publish address |
+| `CLAUDE_DATA_DIR` | _(home)/.claude_ | Docker host transcript directory |
 | `CLAUDE_DIR` | `~/.claude` | Path to Claude Code data directory |
 | `WS_PATH` | `/ws` | WebSocket endpoint path |
-| `MOCK_EVENTS` | `false` | Generate fake events (`true`, `supervisor`) |
+| `MOCK_EVENTS` | `false` | Generate labeled demo events (`true`, `supervisor`, `webhook`, `multi`) |
 | `STALE_IDLE_MS` | `300000` | Mark agent idle after this silence (ms) |
 | `STALE_EVICT_MS` | `900000` | Remove stale agent after this silence (ms) |
 | `MACHINE_ID` | _(auto)_ | Unique ID for this machine (multi-instance) |
 | `MACHINE_NAME` | _(hostname)_ | Display name for this machine in the HUD |
-| `WEBHOOK_TOKEN` | _(none)_ | If set, `POST /api/webhooks` requires Bearer auth |
-| `JOBS_TOKEN` | _(none)_ | If set, enables auth for WebSocket + `/api/hooks` (auto-injected to browser) |
+| `WEBHOOK_TOKEN` | _(inherits JOBS_TOKEN)_ | Optional separate generic webhook credential |
+| `JOBS_TOKEN` | _(none)_ | Browser sign-in, WebSocket/stats/diagnostics access, and bearer auth for Claude/Codex ingestion |
+| `COOKIE_SECURE` | `false` | Set `true` when serving through an HTTPS reverse proxy |
 | `WS_MAX_CLIENTS` | `50` | Maximum total WebSocket connections |
 | `WS_MAX_PER_IP` | `10` | Maximum WebSocket connections per IP |
 | `JOBS_URL` | `http://localhost:8780` | JOBS server URL (used by remote hook scripts) |
@@ -125,24 +132,21 @@ node server/setup-hooks.js
 
 This adds async hooks to your `~/.claude/settings.json` that POST event metadata to the JOBS server. No sensitive data is sent.
 
+Use `--dry-run` to inspect changes and `--remove` to remove JOBS handlers.
+The installer backs up changed files and preserves unrelated handlers. Tests
+use `--claude-home` / `--codex-home` to avoid touching real configuration.
+
 For Codex support:
 
 ```bash
 node server/setup-hooks.js --codex
+node server/setup-hooks.js --codex --check
 ```
 
-**Manual setup:** Add to `~/.claude/settings.json`:
-
-```json
-{
-  "hooks": {
-    "Stop": [{ "matcher": "", "hooks": [{ "type": "command", "command": ".claude/hooks/jobs-notify.sh", "async": true }] }],
-    "SubagentStart": [{ "matcher": "", "hooks": [{ "type": "command", "command": ".claude/hooks/jobs-notify.sh", "async": true }] }],
-    "SubagentStop": [{ "matcher": "", "hooks": [{ "type": "command", "command": ".claude/hooks/jobs-notify.sh", "async": true }] }],
-    "Notification": [{ "matcher": "permission_prompt", "hooks": [{ "type": "command", "command": ".claude/hooks/jobs-notify.sh", "async": true }] }]
-  }
-}
-```
+Use the installer for the platform-specific command and metadata allowlist.
+Restart the coding agent after installation and review hook trust when prompted.
+Codex setup preserves `config.toml` and existing notify commands; see
+[Codex installation and diagnostics](docs/codex.md) for details.
 
 **What improves with hooks enabled:**
 
@@ -163,25 +167,27 @@ curl -X POST http://localhost:8780/api/webhooks \
   -d '{"source_id": "ci-main", "event": "build", "state": "running", "activity": "Running tests"}'
 ```
 
-Webhook agents appear as full office citizens with desks, pathfinding, and bubbles. If `WEBHOOK_TOKEN` is set, include `Authorization: Bearer <token>` or a `token` field in the body.
+Webhook agents appear as full office citizens with desks, pathfinding, and bubbles. Include `Authorization: Bearer <token>` when `WEBHOOK_TOKEN` or `JOBS_TOKEN` is set. Generic `activity`, `source_name`, and URLs are intentionally displayed: send only public labels and links. Codex adapters use fixed activity labels and ignore response text.
 
 ## Security
 
-J.O.B.S. is designed to be safe for network exposure.
+Local startup binds to loopback. For network access, configure authentication, a trusted hostname, and your HTTPS reverse proxy before exposing the port.
 
-**Authentication (opt-in):** Set `JOBS_TOKEN` in your `.env` to enable shared-token auth. When set:
-- WebSocket connections require `?token=<value>` in the URL
-- `POST /api/hooks` requires `Authorization: Bearer <token>` header
-- Browser clients get the token auto-injected via `<meta>` tag — no manual config needed
-- The hook notify scripts (`jobs-notify.js`/`.sh`) send the header automatically when `JOBS_TOKEN` is set in your shell environment
+**Authentication:** Set `JOBS_TOKEN` in `.env`. Enter it on the browser sign-in page; the server creates a revocable, HttpOnly, SameSite=Strict cookie valid for 24 hours. Tokens are never embedded in HTML, browser storage, or WebSocket URLs. Signing out revokes the session; a server restart requires signing in again.
+
+- Stats, provider diagnostics, and WebSocket connections require viewer authentication.
+- `/api/hooks`, `/api/codex/hooks`, and `/api/codex/notify` require `Authorization: Bearer <JOBS_TOKEN>`.
+- `/api/webhooks` uses `WEBHOOK_TOKEN` when configured, otherwise `JOBS_TOKEN`.
+- Set sender environment variables `JOBS_URL` and `JOBS_TOKEN` for hook delivery. Browser sign-in does not configure hook credentials.
+- Host and Origin checks reject unexpected browser origins and DNS rebinding. Add network hostnames to `ALLOWED_HOSTS` and preserve Host/Origin through the proxy. Set `COOKIE_SECURE=true` for HTTPS proxy deployments.
 
 **Service identity:** `GET /healthz` returns `{ ok, app: "jobs", version }` so integrations (e.g. Tether) can positively identify a running JOBS instance.
 
-Without `JOBS_TOKEN`, everything works open (zero-config default for local use).
+Without `JOBS_TOKEN`, allowed local clients have access without sign-in. Explicitly allowing a network hostname does not enable authentication; configure both for network deployment.
 
 **Input validation:** All webhook and hook payloads are sanitized through `server/sanitize.ts`. URLs are validated as http/https only — `javascript:` and `data:` protocols are rejected both server-side and client-side.
 
-**Rate limiting:** API routes are limited to 120 requests/minute/IP. WebSocket connections are capped at 50 total (`WS_MAX_CLIENTS`) and 10 per IP (`WS_MAX_PER_IP`).
+**Rate limiting:** API routes allow 1,200 requests/minute/IP for busy hook streams, with 10 sign-in attempts/minute/IP. WebSocket connections are capped at 50 total (`WS_MAX_CLIENTS`) and 10 per IP (`WS_MAX_PER_IP`).
 
 **Docker hardening:** The container runs as a non-root user (`jobs`), with a read-only filesystem, all capabilities dropped, `no-new-privileges`, and resource limits (512MB RAM, 1 CPU). Stats persist via a named volume.
 
@@ -281,11 +287,10 @@ src/                    React frontend
 
 ### How rendering works
 
-J.O.B.S. has a three-tier rendering fallback:
+J.O.B.S. uses a detailed map when licensed images are available:
 
 1. **Tiled map + tileset images** — if a `.tmj` map and matching PNG sprite sheets are present, the [Tiled Map Editor](https://www.mapeditor.org/) layout renders directly with full detail
-2. **JSON map config + tileset images** — if only the PNGs are present, the built-in JSON map config renders using the sprite sheets
-3. **Procedural fallback** — if no tileset images exist, the office renders as colored rectangles with the same layout and desk positions
+2. **Procedural fallback** — if images are missing or cannot load, the office renders as colored rectangles with the same shared layout and desk positions
 
 The procedural fallback ships by default and works out of the box — no assets to buy, no setup required. Agents, pathfinding, desk assignment, and all features work identically regardless of which renderer is active.
 
@@ -310,12 +315,12 @@ You can build a completely custom office layout with [Tiled Map Editor](https://
 1. Create a `.tmj` map (16x16 tile size, 20x15 grid) with your own tileset PNGs
 2. Place the tileset PNGs in `src/assets/tiles/`
 3. Replace the map data in `src/assets/maps/office-tiled.json` with your exported `.tmj`
-4. Update the station positions in `src/engine/PixelOffice.tsx` — the `TILED_STATIONS` object defines where agents sit, think, and walk:
+4. Update the shared station positions and access lanes in `src/types/office-layout.ts`, used by both server allocation and rendering:
    - `door` — where agents enter/exit
    - `desks` — array of `{x, y}` grid positions for agent workstations
    - `whiteboard`, `terminal`, `library`, `coffee` — shared stations
 
-If your layout has a different desk arrangement, the `TILED_STATIONS.desks` array is what you need to change. The pathfinding grid and walkability are derived automatically from the Tiled map layers (floor = walkable, desk/wall = blocked).
+The built-in layout has 16 regular desks and one supervisor desk. Changes to the map should preserve reachability from the door to every station; `tests/lifecycle-layout.test.ts` checks both renderers.
 
 ## Screenshots
 
@@ -339,10 +344,10 @@ The full design document lives in [VISION.md](VISION.md). Here's what's ahead.
 
 Concrete, scoped features planned for future releases:
 
-- **Settings menu** — slide-out panel with per-sound volume sliders, display options, notification preferences
+- **Sound customization** — per-sound volume sliders and sound packs beyond the current settings
 - **Open-source tileset upgrade** — replace procedural colored rectangles with detailed code-drawn pixel art (zero external assets, zero licensing concerns)
 - **Demo mode** — `?demo=true` URL param or HUD button to showcase the office without real Claude sessions, with auto-demo on idle for public-facing instances
-- **Dashboard / kiosk mode** — full-screen mode optimized for wall-mounted displays, with minimal HUD, auto-rotate agent focus, and auto-hiding cursor
+- **Kiosk enhancements** — auto-rotate agent focus and auto-hide the cursor beyond the current office-focused mode
 
 ### Moonshots
 

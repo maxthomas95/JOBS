@@ -3,6 +3,8 @@ import WebSocket, { WebSocketServer } from 'ws';
 import type { PixelEvent, WSMessage } from '../src/types/events.js';
 import { SessionManager } from './session-manager.js';
 import type { StatsStore } from './stats-store.js';
+import { ViewerAuth } from './auth.js';
+import { publicEvent } from './public-event.js';
 
 export class WSServer {
   private readonly wss: WebSocketServer;
@@ -14,29 +16,37 @@ export class WSServer {
   private readonly maxClients: number;
   private readonly maxPerIp: number;
   private readonly ipConnections = new Map<string, number>();
-  private readonly token: string | null;
+  private readonly auth: ViewerAuth;
+  private readonly requests = new WeakMap<WebSocket, http.IncomingMessage>();
+  private readonly alive = new WeakMap<WebSocket, boolean>();
+  private readonly heartbeatTimer: ReturnType<typeof setInterval>;
 
   constructor(
     server: http.Server,
     private readonly sessionManager: SessionManager,
     path = process.env.WS_PATH ?? '/ws',
-    token: string | null = null,
+    auth: ViewerAuth | string | null = null,
   ) {
     this.maxClients = Number(process.env.WS_MAX_CLIENTS) || 50;
     this.maxPerIp = Number(process.env.WS_MAX_PER_IP) || 10;
-    this.token = token;
+    this.auth = auth instanceof ViewerAuth ? auth : new ViewerAuth(auth);
 
-    this.wss = new WebSocketServer({ server, path, maxPayload: 16 * 1024 });
-    this.wss.on('connection', (ws, req) => {
-      // Auth check
-      if (this.token) {
-        const url = new URL(req.url ?? '/', 'http://localhost');
-        const clientToken = url.searchParams.get('token');
-        if (clientToken !== this.token) {
-          ws.close(4401, 'Unauthorized');
-          return;
+    this.wss = new WebSocketServer({
+      server, path, maxPayload: 16 * 1024,
+      verifyClient: (info, done) => {
+        if (!this.auth.canConnect(info.req)) { done(false, 401, 'Unauthorized'); return; }
+        const ip = info.req.socket.remoteAddress ?? 'unknown';
+        if (this.wss.clients.size >= this.maxClients || (this.ipConnections.get(ip) ?? 0) >= this.maxPerIp) {
+          done(false, 503, 'Connection limit reached'); return;
         }
-      }
+        done(true);
+      },
+    });
+    this.wss.on('connection', (ws, req) => {
+      this.requests.set(ws, req);
+      this.alive.set(ws, true);
+      ws.on('pong', () => this.alive.set(ws, true));
+      ws.on('error', () => ws.terminate());
 
       // Global connection limit
       if (this.wss.clients.size > this.maxClients) {
@@ -74,10 +84,12 @@ export class WSServer {
       });
     });
 
-    setInterval(() => {
+    this.heartbeatTimer = setInterval(() => {
       for (const client of this.wss.clients) {
-        if (client.readyState === WebSocket.OPEN) {
-          client.send(JSON.stringify({ type: 'ping' } satisfies WSMessage));
+        if (this.canSend(client)) {
+          if (!this.alive.get(client)) { client.terminate(); continue; }
+          this.alive.set(client, false);
+          client.ping();
         }
       }
     }, 30000).unref();
@@ -85,6 +97,16 @@ export class WSServer {
 
   setStatsStore(store: StatsStore): void {
     this.statsStore = store;
+  }
+
+  private canSend(client: WebSocket): boolean {
+    if (client.readyState !== WebSocket.OPEN) return false;
+    const req = this.requests.get(client);
+    if (!req || !this.auth.canConnect(req)) {
+      client.close(4401, 'Session expired');
+      return false;
+    }
+    return true;
   }
 
   broadcastSnapshot(): void {
@@ -115,17 +137,17 @@ export class WSServer {
     };
     const data = JSON.stringify(message);
     for (const client of this.wss.clients) {
-      if (client.readyState === WebSocket.OPEN) {
+      if (this.canSend(client)) {
         client.send(data);
       }
     }
   }
 
   broadcast(event: PixelEvent): void {
-    const message: WSMessage = { type: 'event', payload: event };
+    const message: WSMessage = { type: 'event', payload: publicEvent(event) };
     const data = JSON.stringify(message);
     for (const client of this.wss.clients) {
-      if (client.readyState === WebSocket.OPEN) {
+      if (this.canSend(client)) {
         client.send(data);
       }
     }
@@ -143,10 +165,12 @@ export class WSServer {
   }
 
   close(): void {
+    clearInterval(this.heartbeatTimer);
     if (this.snapshotTimer) {
       clearTimeout(this.snapshotTimer);
       this.snapshotTimer = null;
     }
+    for (const client of this.wss.clients) client.terminate();
     this.wss.close();
   }
 

@@ -14,6 +14,8 @@ import { createHookRouter } from './hook-receiver.js';
 import { createWebhookRouter } from './webhook-receiver.js';
 import { StatsStore } from './stats-store.js';
 import { createRateLimiter } from './rate-limit.js';
+import { ViewerAuth, requireBearer } from './auth.js';
+import { createCodexRouter } from './codex-receiver.js';
 
 /** Extract parent session UUID from a subagent file path.
  *  Path: ~/.claude/projects/<project>/<parent-uuid>/subagents/<child-uuid>.jsonl */
@@ -49,6 +51,11 @@ function readAppVersion(): string {
 const app = express();
 const appVersion = readAppVersion();
 const port = Number(process.env.PORT ?? 8780);
+const host = process.env.HOST || '127.0.0.1';
+const wsPath = process.env.WS_PATH || '/ws';
+if (!wsPath.startsWith('/') || wsPath.startsWith('//') || /[?#\\\s]/.test(wsPath)) {
+  throw new Error('WS_PATH must be an absolute path without a query or fragment');
+}
 const rawClaudeDir = process.env.CLAUDE_DIR ?? join(homedir(), '.claude');
 const claudeDir = rawClaudeDir.startsWith('~')
   ? join(homedir(), rawClaudeDir.slice(1))
@@ -58,7 +65,9 @@ const useMock = ['true', 'supervisor', 'webhook', 'multi'].includes(mockMode);
 const machineId = process.env.MACHINE_ID || undefined;
 const machineName = process.env.MACHINE_NAME || undefined;
 const jobsToken = process.env.JOBS_TOKEN || null;
+const auth = new ViewerAuth(jobsToken);
 
+app.disable('x-powered-by');
 app.use(express.json({ limit: '64kb' }));
 
 // Security headers
@@ -82,29 +91,11 @@ app.use((_req, res, next) => {
   next();
 });
 
-// Serve index.html with optional token injection, other assets static
-if (jobsToken) {
-  let indexHtml: string;
-  try {
-    indexHtml = readFileSync(join('dist', 'index.html'), 'utf-8');
-  } catch {
-    indexHtml = '';
-  }
-  const injectedHtml = indexHtml.replace(
-    '</head>',
-    `  <meta name="jobs-token" content="${jobsToken}">\n  </head>`,
-  );
-  app.get('/', (_req, res) => {
-    res.setHeader('Content-Type', 'text/html');
-    res.send(injectedHtml);
-  });
-  app.use(express.static('dist', { index: false }));
-} else {
-  app.use(express.static('dist'));
-}
+// Public application shell contains no credentials or session data.
+app.use(express.static('dist'));
 
 // Rate limiting
-const apiLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 120 });
+const apiLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 1200 });
 const healthLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 30 });
 
 // Identifies this service to integrations (e.g. Tether auto-detection) — keep `app: 'jobs'` stable.
@@ -114,7 +105,7 @@ app.get('/healthz', healthLimiter, (_req, res) => {
 
 const server = http.createServer(app);
 const sessionManager = new SessionManager(undefined, undefined, machineId, machineName);
-const wsServer = new WSServer(server, sessionManager, undefined, jobsToken);
+const wsServer = new WSServer(server, sessionManager, wsPath, auth);
 
 // Wire up snapshot callback so waiting-for-human detector can broadcast changes
 sessionManager.setSnapshotCallback(() => wsServer.broadcastSnapshot());
@@ -125,9 +116,10 @@ sessionManager.setStatsStore(statsStore);
 wsServer.setStatsStore(statsStore);
 
 app.use('/api', apiLimiter);
+app.use(auth.router(wsPath, useMock));
 
-app.get('/api/stats', (_req, res) => {
-  res.json(statsStore.getStats());
+app.get('/api/stats', auth.requireViewer, (_req, res) => {
+  res.json(statsStore.getPublicStats());
 });
 
 // Mount hook receiver for Claude Code hooks integration
@@ -135,6 +127,13 @@ app.use(createHookRouter(sessionManager, wsServer, jobsToken));
 
 // Mount webhook receiver for external integrations (CI/CD, Codex, monitoring)
 app.use(createWebhookRouter(sessionManager, wsServer));
+
+app.use('/api/codex', requireBearer(jobsToken));
+app.use('/api/providers', auth.requireViewer);
+app.use(createCodexRouter(sessionManager, event => {
+  wsServer.broadcast(event);
+  wsServer.broadcastSnapshot();
+}));
 
 let watcher: SessionWatcher | null = null;
 
@@ -153,14 +152,15 @@ if (useMock) {
     mock.start((event) => {
       sessionManager.handleEvent(event);
       wsServer.broadcast(event);
+      wsServer.broadcastSnapshot();
     });
   }
 } else {
   watcher = new SessionWatcher(claudeDir);
 
   watcher.on('session', ({ sessionId, filePath, agentId, isSubAgent, parentSessionId }) => {
-    // eslint-disable-next-line no-console
     const fileName = filePath.split(/[/\\]/).pop() ?? filePath;
+    // eslint-disable-next-line no-console
     console.log(`[watcher] session ${sessionId} (${fileName})${isSubAgent ? ` [subagent of ${parentSessionId?.slice(0, 12)}…]` : ''}`);
     sessionManager.registerSession(sessionId, filePath, parentSessionId);
     const started = createSessionEvent(sessionId, 'started', {
@@ -202,6 +202,7 @@ if (useMock) {
       );
       sessionManager.handleEvent(event);
       wsServer.broadcast(event);
+      wsServer.broadcastSnapshot();
     }
   });
 
@@ -224,19 +225,24 @@ server.on('error', (error) => {
   throw error;
 });
 
-server.listen(port, () => {
+server.listen(port, host, () => {
   // eslint-disable-next-line no-console
-  console.log(`jobs server listening on http://localhost:${port} (mock=${useMock})`);
+  console.log(`jobs server listening on http://${host}:${port} (mock=${useMock}, auth=${!!jobsToken})`);
 });
 
-function gracefulShutdown() {
+let shuttingDown = false;
+async function gracefulShutdown() {
+  if (shuttingDown) return;
+  shuttingDown = true;
   // eslint-disable-next-line no-console
   console.log('[JOBS] Shutting down gracefully...');
   if (watcher) {
-    watcher.stop();
+    await watcher.stop();
   }
   wsServer.close();
+  sessionManager.dispose();
   statsStore.flush();
+  statsStore.dispose();
   server.close(() => {
     process.exit(0);
   });

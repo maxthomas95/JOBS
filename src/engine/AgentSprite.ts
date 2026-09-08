@@ -5,6 +5,7 @@ import type { Point } from '../types/agent.js';
 import { STATIONS, tileToWorld } from '../types/agent.js';
 import { findPath } from './Pathfinder.js';
 import { useOfficeStore } from '../state/useOfficeStore.js';
+import { prefersReducedMotion } from '../state/useMotionStore.js';
 import claudeGifUrl from '../assets/claude.gif';
 import openclawSvgUrl from '../assets/openclaw-mascot.svg';
 import codexPngUrl from '../assets/codex.png';
@@ -158,6 +159,12 @@ export class AgentSpriteManager {
 
     sprite.x = agent.position.x;
     sprite.y = agent.position.y;
+    sprite.eventMode = 'static';
+    sprite.cursor = 'pointer';
+    sprite.on('pointertap', () => {
+      useOfficeStore.getState().selectAgent(agent.id);
+      useOfficeStore.getState().focusAgent(agent.id);
+    });
     this.container.addChild(sprite);
     this.sprites.set(agent.id, {
       sprite, shadow, baseSize, phase: 0, waypoints: [], pathTarget: null,
@@ -183,8 +190,13 @@ export class AgentSpriteManager {
     this.sprites.delete(id);
   }
 
+  destroy(): void {
+    for (const id of [...this.sprites.keys()]) this.removeAgent(id);
+  }
+
   update(deltaSeconds: number, agents: Map<string, Agent>): void {
     const { focusedAgentId: focusedId, focusedAgentIds } = useOfficeStore.getState();
+    const reducedMotion = prefersReducedMotion();
 
     for (const [id, agent] of agents.entries()) {
       const visual = this.sprites.get(id);
@@ -192,6 +204,27 @@ export class AgentSpriteManager {
         continue;
       }
       const sprite = visual.sprite;
+
+      if (reducedMotion) {
+        spriteStop(sprite);
+        const target = agent.targetPosition || agent.position;
+        sprite.position.set(target.x, target.y);
+        sprite.rotation = 0;
+        sprite.width = visual.baseSize + (id === focusedId || focusedAgentIds.has(id) ? 3 : 0);
+        sprite.height = sprite.width;
+        sprite.tint = agent.state === 'error' ? 0xef9393 : agent.waitingForHuman ? 0xefb75b : 0xffffff;
+        visual.shadow.position.set(sprite.x, sprite.y + 4);
+        visual.phase = 0;
+        visual.waypoints = [];
+        visual.pathTarget = null;
+        visual.isPatrolling = false;
+        visual.isPacingForTeam = false;
+        visual.delegationState = 'none';
+        supervisorCheckIns.delete(id);
+        this.updateCrown(agent, visual, agents);
+        spritePositions.set(id, { x: sprite.x, y: sprite.y });
+        continue;
+      }
 
       // --- Delegation escort sequence (highest priority) ---
       const delegationHandled = this.updateDelegation(deltaSeconds, agent, visual, agents);
