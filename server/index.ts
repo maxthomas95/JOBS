@@ -14,7 +14,8 @@ import { createHookRouter } from './hook-receiver.js';
 import { createWebhookRouter } from './webhook-receiver.js';
 import { StatsStore } from './stats-store.js';
 import { createRateLimiter } from './rate-limit.js';
-import { ViewerAuth } from './auth.js';
+import { ViewerAuth, requireBearer } from './auth.js';
+import { createCodexRouter } from './codex-receiver.js';
 
 /** Extract parent session UUID from a subagent file path.
  *  Path: ~/.claude/projects/<project>/<parent-uuid>/subagents/<child-uuid>.jsonl */
@@ -115,10 +116,10 @@ sessionManager.setStatsStore(statsStore);
 wsServer.setStatsStore(statsStore);
 
 app.use('/api', apiLimiter);
-app.use(auth.router(wsPath));
+app.use(auth.router(wsPath, useMock));
 
 app.get('/api/stats', auth.requireViewer, (_req, res) => {
-  res.json(statsStore.getStats());
+  res.json(statsStore.getPublicStats());
 });
 
 // Mount hook receiver for Claude Code hooks integration
@@ -126,6 +127,13 @@ app.use(createHookRouter(sessionManager, wsServer, jobsToken));
 
 // Mount webhook receiver for external integrations (CI/CD, Codex, monitoring)
 app.use(createWebhookRouter(sessionManager, wsServer));
+
+app.use('/api/codex', requireBearer(jobsToken));
+app.use('/api/providers', auth.requireViewer);
+app.use(createCodexRouter(sessionManager, event => {
+  wsServer.broadcast(event);
+  wsServer.broadcastSnapshot();
+}));
 
 let watcher: SessionWatcher | null = null;
 
@@ -144,6 +152,7 @@ if (useMock) {
     mock.start((event) => {
       sessionManager.handleEvent(event);
       wsServer.broadcast(event);
+      wsServer.broadcastSnapshot();
     });
   }
 } else {
@@ -193,6 +202,7 @@ if (useMock) {
       );
       sessionManager.handleEvent(event);
       wsServer.broadcast(event);
+      wsServer.broadcastSnapshot();
     }
   });
 
@@ -220,14 +230,19 @@ server.listen(port, host, () => {
   console.log(`jobs server listening on http://${host}:${port} (mock=${useMock}, auth=${!!jobsToken})`);
 });
 
-function gracefulShutdown() {
+let shuttingDown = false;
+async function gracefulShutdown() {
+  if (shuttingDown) return;
+  shuttingDown = true;
   // eslint-disable-next-line no-console
   console.log('[JOBS] Shutting down gracefully...');
   if (watcher) {
-    watcher.stop();
+    await watcher.stop();
   }
   wsServer.close();
+  sessionManager.dispose();
   statsStore.flush();
+  statsStore.dispose();
   server.close(() => {
     process.exit(0);
   });

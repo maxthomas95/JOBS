@@ -5,7 +5,7 @@ services:
     ports:
       - "${JOBS_BIND_ADDRESS:-127.0.0.1}:8780:8780"
     volumes:
-      - ${HOME}/.claude:/data/claude:ro
+      - ${CLAUDE_DATA_DIR:-${HOME:-${USERPROFILE:-.}}/.claude}:/data/claude:ro
       - jobs-data:/app/data
     environment:
       - CLAUDE_DIR=/data/claude
@@ -17,6 +17,7 @@ services:
       - JOBS_TOKEN=${JOBS_TOKEN:-}
       - WEBHOOK_TOKEN=${WEBHOOK_TOKEN:-}
       - COOKIE_SECURE=${COOKIE_SECURE:-false}
+      - ALLOWED_HOSTS=${ALLOWED_HOSTS:-}
     restart: unless-stopped
     read_only: true
     tmpfs:

@@ -40,7 +40,7 @@ export function SettingsPanel({ open, onClose }: { open: boolean; onClose: () =>
   }
   async function signOut() {
     try {
-      const response = await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' });
+      const response = await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin', signal: AbortSignal.timeout(7500) });
       if (!response.ok) throw new Error('Sign out failed');
       window.dispatchEvent(new Event('jobs:authentication-required'));
     } catch { setNotice('Could not sign out. Check the connection and try again.'); }

@@ -45,7 +45,7 @@ function rejectedSocket(url: string, headers?: Record<string, string>): Promise<
 test('protected office exposes configuration but never a credential; query tokens cannot upgrade', async t => {
   const { base } = await office(t);
   const config = await (await fetch(`${base}/api/auth`)).text();
-  assert.deepEqual(JSON.parse(config), { required: true, authenticated: false, wsPath: '/office-stream' });
+  assert.deepEqual(JSON.parse(config), { required: true, authenticated: false, wsPath: '/office-stream', demoMode: false });
   assert.ok(!config.includes('fixture-secret'));
   assert.equal((await fetch(`${base}/api/stats`)).status, 401);
   assert.equal(await rejectedSocket(`${base.replace('http:', 'ws:')}/office-stream?token=fixture-secret`), 401);
@@ -94,4 +94,12 @@ test('expired viewer session loses access; tokenless loopback use stays simple',
   assert.equal((await fetch(`${local.base}/api/stats`)).status, 200);
   assert.equal((await (await fetch(`${local.base}/api/auth`)).json()).authenticated, true);
   assert.equal((await fetch(`${local.base}/api/stats`, { headers: { Origin: 'https://unrelated.invalid' } })).status, 401);
+});
+
+test('an attacker-controlled hostname cannot rebind a tokenless office', async t => {
+  const { base } = await office(t, null);
+  const headers = { Host: 'attacker.invalid', Origin: 'http://attacker.invalid' };
+  assert.equal((await fetch(`${base}/api/stats`, { headers })).status, 401);
+  assert.equal((await fetch(`${base}/api/hooks`, { method: 'POST', headers })).status, 401);
+  assert.equal(await rejectedSocket(`${base.replace('http:', 'ws:')}/office-stream`, headers), 401);
 });

@@ -20,8 +20,20 @@ function bearer(req: IncomingMessage): string | undefined {
     : undefined;
 }
 
+/** Restrict hostnames as well as Origin to reject browser DNS rebinding. */
+export function trustedHost(req: IncomingMessage): boolean {
+  try {
+    const host = new URL(`http://${req.headers.host}`).hostname.toLowerCase();
+    const allowed = new Set(['localhost', '127.0.0.1', '[::1]',
+      ...(process.env.ALLOWED_HOSTS || '').split(',').map(value => value.trim().toLowerCase()).filter(Boolean),
+    ]);
+    return allowed.has(host);
+  } catch { return false; }
+}
+
 /** Browsers must connect from this origin; non-browser integrations omit Origin. */
 export function sameOrigin(req: IncomingMessage): boolean {
+  if (!trustedHost(req)) return false;
   if (req.headers['sec-fetch-site'] === 'cross-site') return false;
   if (!req.headers.origin) return true;
   try {
@@ -80,7 +92,7 @@ export class ViewerAuth {
     next();
   };
 
-  router(wsPath: string): Router {
+  router(wsPath: string, demoMode = false): Router {
     const router = Router();
     const loginLimiter = createRateLimiter({ maxRequests: 10, windowMs: 60_000 });
     router.use('/api/auth', (_req, res, next) => {
@@ -88,7 +100,7 @@ export class ViewerAuth {
       next();
     });
     router.get('/api/auth', (req, res) => {
-      res.json({ required: !!this.token, authenticated: this.canConnect(req), wsPath });
+      res.json({ required: !!this.token, authenticated: this.canConnect(req), wsPath, demoMode });
     });
     router.post('/api/auth/login', loginLimiter, (req, res) => {
       if (!sameOrigin(req)) {

@@ -15,15 +15,11 @@ import tiledMapData from '../assets/maps/office-tiled.json';
 
 import { useThemeStore } from '../state/useThemeStore.js';
 
-// Import tileset images — Vite will resolve these to hashed URLs (or 404 if missing)
-let officeSheetUrl: string | undefined;
-let roomSheetUrl: string | undefined;
-try {
-  officeSheetUrl = new URL('../assets/tiles/Modern_Office_16x16.png', import.meta.url).href;
-  roomSheetUrl = new URL('../assets/tiles/Room_Builder_Office_16x16.png', import.meta.url).href;
-} catch {
-  // Images not available — will use procedural fallback
-}
+// Optional licensed images are discovered at build time; an unlicensed checkout
+// uses the procedural office without failed requests or missing-asset warnings.
+const tileImages = import.meta.glob('../assets/tiles/*.png', { eager: true, query: '?url', import: 'default' }) as Record<string, string>;
+const officeSheetUrl = tileImages['../assets/tiles/Modern_Office_16x16.png'];
+const roomSheetUrl = tileImages['../assets/tiles/Room_Builder_Office_16x16.png'];
 
 export function PixelOffice() {
   const hostRef = useRef<HTMLDivElement | null>(null);

@@ -9,14 +9,14 @@ export function AuthGate({ children }: { children: ReactNode }) {
   const [submitting, setSubmitting] = useState(false);
   const check = useCallback(async (signal?: AbortSignal) => {
     try {
-      const response = await fetch('/api/auth', { credentials: 'same-origin', signal });
+      const response = await fetch('/api/auth', { credentials: 'same-origin', signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(7500)]) : AbortSignal.timeout(7500) });
       if (!response.ok) throw new Error('Cannot reach the office server.');
-      const data = await response.json() as { required: boolean; authenticated: boolean; wsPath: string };
+      const data = await response.json() as { required: boolean; authenticated: boolean; wsPath: string; demoMode?: boolean };
       if (typeof data.required !== 'boolean' || typeof data.authenticated !== 'boolean'
         || typeof data.wsPath !== 'string' || !data.wsPath.startsWith('/') || data.wsPath.startsWith('//')) {
         throw new Error('The office server returned an invalid response.');
       }
-      useServerConfigStore.getState().configure({ wsPath: data.wsPath, authenticationRequired: data.required });
+      useServerConfigStore.getState().configure({ wsPath: data.wsPath, authenticationRequired: data.required, demoMode: data.demoMode === true });
       setStatus(data.authenticated ? 'ready' : 'login');
       setMessage('');
     } catch (err) {
@@ -45,6 +45,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
       const response = await fetch('/api/auth/login', {
         method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token }),
+        signal: AbortSignal.timeout(7500),
       });
       setToken('');
       if (!response.ok) {

@@ -64,12 +64,17 @@ export function useWebSocket(url: string): void {
           pingTimer = null;
         }
         if (shouldReconnect) {
+          if (event.code === 4401) {
+            shouldReconnect = false;
+            window.dispatchEvent(new Event('jobs:authentication-required'));
+            return;
+          }
           // The browser hides handshake HTTP status. Ask the same-origin API
           // before retrying so an expired cookie returns to sign-in promptly.
           try {
-            const response = await fetch('/api/auth', { credentials: 'same-origin', signal: authCheck.signal });
+            const response = await fetch('/api/auth', { credentials: 'same-origin', signal: AbortSignal.any([authCheck.signal, AbortSignal.timeout(5000)]) });
             const auth = await response.json() as { authenticated?: boolean };
-            if (shouldReconnect && (event.code === 4401 || auth.authenticated === false)) {
+            if (shouldReconnect && auth.authenticated === false) {
               shouldReconnect = false;
               window.dispatchEvent(new Event('jobs:authentication-required'));
               return;

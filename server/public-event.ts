@@ -20,6 +20,8 @@ export function publicEvent(event: PixelEvent): PixelEvent {
       ...base, type: 'session', action: event.action, project: safeBasename(event.project) ?? undefined,
       roleName: safeIdentifier(event.roleName) ?? undefined, source: safeIdentifier(event.source) ?? undefined,
       characterIndex: event.characterIndex, deskIndex: event.deskIndex, name: event.name, parentId: event.parentId,
+      startedAt: event.startedAt, provider: safeIdentifier(event.provider) ?? undefined,
+      integrationMode: event.integrationMode, model: safeIdentifier(event.model) ?? undefined,
     };
     case 'tool': return {
       ...base, type: 'tool', tool: safeIdentifier(event.tool) ?? 'unknown_tool', status: event.status,

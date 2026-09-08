@@ -236,6 +236,7 @@ export class WebhookMockGenerator {
         sessionManager.registerWebhookAgent('codex-refactor', {
           sourceName: 'Codex CLI',
           sourceType: 'codex',
+          integrationMode: 'hooks',
           project: 'my-app',
           state: 'thinking',
           activity: 'Refactoring auth module',
@@ -325,6 +326,7 @@ export class MultiInstanceMockGenerator {
     sessionManager.registerWebhookAgent('m2-codex-main', {
       sourceName: 'Codex CLI',
       sourceType: 'codex',
+      integrationMode: 'hooks',
       project: 'backend',
       machine: 'dev-server-2',
       state: 'running',
