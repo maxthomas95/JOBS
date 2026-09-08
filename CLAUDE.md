@@ -2,6 +2,11 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+Shared working guidance is also available in [AGENTS.md](AGENTS.md), with scoped
+guidance under `server/` and `src/`. See the [September 2026 review](docs/reviews/2026-09-07.md)
+for verified privacy/auth gaps, current Codex limitations, and UI priorities;
+the historical completion and security claims below are not current validation.
+
 ## Project Overview
 
 **J.O.B.S. (Jarvis Operations & Bot Surveillance)** — a self-hosted, browser-based pixel-art office that visualizes Claude Code agent activity in real-time. Each active coding session spawns a character who moves between stations (desk, whiteboard, terminal, library, coffee machine). Part of the Jarvis AI assistant ecosystem.
@@ -46,7 +51,9 @@ The system has two main parts connected by WebSocket:
 
 ## Project Status
 
-Milestones v1 (M1-M5) and v2 (M1-M6) are complete. Currently in v2-M7 (Stabilization & Polish). See VISION.md for the full roadmap.
+VISION.md marks v1 (M1-M5) and v2 (M1-M8) implemented. The September 2026 review
+identifies remaining correctness, privacy, integration, and UI work. See VISION.md
+for the full roadmap and the dated review for the latest verified baseline.
 
 ## Key Design Decisions
 
