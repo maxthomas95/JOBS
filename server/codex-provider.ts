@@ -158,7 +158,7 @@ export class CodexProvider {
     // A delayed tool start must not undo its completion, even if the sender's clock/order is imperfect.
     if (hook.toolId && hook.event === 'PreToolUse' && session.tools.has(hook.toolId)) return this.ignore('tool-already-observed');
     if (hook.toolId && hook.event === 'PostToolUse' && session.tools.get(hook.toolId) === 'completed') return this.ignore('tool-already-completed');
-    const terminal = ['Stop', 'Interrupt', 'SessionEnd', 'SubagentStop'].includes(hook.event);
+    const terminal = ['Stop', 'Interrupt', 'SubagentStop'].includes(hook.event);
     // Terminal events always close their own turn, even if an async tool event arrived first.
     if (!terminal && hook.timestamp < session.lastTimestamp) return this.ignore('out-of-order');
     session.lastSeen = now;

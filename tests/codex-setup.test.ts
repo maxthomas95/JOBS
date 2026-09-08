@@ -122,11 +122,13 @@ test('notifiers deliver metadata only with bearer auth; unknown notify does not 
   const child = spawn(process.platform === 'win32' ? 'powershell.exe' : '/bin/sh', process.platform === 'win32'
     ? ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', hookCommand]
     : ['-c', hookCommand], { env: { ...process.env, JOBS_URL: '', JOBS_TOKEN: 'synthetic-token' } });
-  let commandError = '';
+  let commandError = '', commandOutput = '';
+  child.stdout.on('data', data => { commandOutput += data; });
   child.stderr.on('data', data => { commandError += data; });
   child.stdin.end(JSON.stringify({ hook_event_name: 'SessionStart', session_id: 'installed-test', source: 'startup' }));
   assert.equal((await once(child, 'exit'))[0], 0, commandError);
   assert.equal(commandError, '');
+  assert.equal(commandOutput.trim(), '{}', 'installed command returned its passive hook result');
   assert.equal(requests[2].body.session_id, 'installed-test');
   const emptyPath = home(t);
   const check = await runScript(setup, ['--codex', '--codex-home', emptyPath, '--check'], undefined, url);

@@ -78,7 +78,9 @@ The adapter retains closed turns and delivery identities to reject duplicates
 and late events. Protection is bounded to 24 hours/2000 session records and
 256 closed turns per session, in memory; restarting JOBS resets this history.
 Turn-scoped hooks without the documented turn ID are rejected instead of
-guessing which turn to update. The server's generic stale-session policy still
+guessing which turn to update, including approval and compaction events.
+Session start/end do not require a turn ID. An older session-end timestamp
+cannot close a newer resumed turn. The server's generic stale-session policy still
 applies when a client never sends session end.
 
 ## Existing notify installations

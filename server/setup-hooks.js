@@ -74,7 +74,7 @@ async function main() {
   const marker = opts.codex ? '--jobs-codex-observer-v1' : '--jobs-claude-observer-v1';
   const command = `${shellLiteral(process.execPath)} ${shellLiteral(scriptPath)} ${marker}`;
   const encodedPath = Buffer.from(scriptPath, 'utf8').toString('base64');
-  const commandWindows = `node -e "process.argv[1]=Buffer.from('${encodedPath}','base64').toString();import(require('node:url').pathToFileURL(process.argv[1]).href)" -- ${marker}`;
+  const commandWindows = `node.exe -e "process.argv[1]=Buffer.from('${encodedPath}','base64').toString();import(require('node:url').pathToFileURL(process.argv[1]).href)" -- ${marker}`;
   let url;
   try {
     const existingUrl = opts.codex && existsSync(transportPath) ? jsonFile(transportPath).url : undefined;

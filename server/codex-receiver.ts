@@ -14,7 +14,8 @@ export function createCodexRouter(sink: CodexSessionSink, publish?: (event: Pixe
       return;
     }
     const result = provider.ingest(req.body);
-    res.status(result.reason === 'unsupported-or-invalid' ? 400 : 200).json({ ok: true, ...result });
+    const valid = result.reason !== 'unsupported-or-invalid';
+    res.status(valid ? 200 : 400).json({ ok: valid, ...result });
   });
   router.post('/api/codex/notify', (req, res) => {
     const result = provider.ingest(req.body, 'notify');
