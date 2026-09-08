@@ -1,8 +1,8 @@
 import { Router } from 'express';
-import { basename } from 'node:path';
 import type { SessionManager } from './session-manager.js';
 import type { WSServer } from './ws-server.js';
-import { safeString } from './sanitize.js';
+import { safeString, safeBasename, safeIdentifier } from './sanitize.js';
+import { requireBearer } from './auth.js';
 
 const ALLOWED_HOOK_EVENTS = new Set([
   'Stop', 'SubagentStart', 'SubagentStop',
@@ -15,21 +15,11 @@ const ALLOWED_HOOK_EVENTS = new Set([
 export function createHookRouter(sessionManager: SessionManager, wsServer: WSServer, token: string | null = null): Router {
   const router = Router();
 
-  router.post('/api/hooks', (req, res) => {
+  router.post('/api/hooks', requireBearer(token), (req, res) => {
     try {
-      // Auth check — always return 200 to never block Claude
-      if (token) {
-        const authHeader = req.headers.authorization;
-        const headerToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
-        if (headerToken !== token) {
-          res.status(200).json({ ok: true });
-          return;
-        }
-      }
-
-      const body = req.body as Record<string, unknown>;
-      const sessionId = safeString(body.session_id, 128);
-      const hookEventName = safeString(body.hook_event_name, 64);
+      const input = (req.body ?? {}) as Record<string, unknown>;
+      const sessionId = safeIdentifier(input.session_id);
+      const hookEventName = safeString(input.hook_event_name, 64);
 
       if (!sessionId || !hookEventName) {
         res.status(200).json({ ok: true });
@@ -43,18 +33,15 @@ export function createHookRouter(sessionManager: SessionManager, wsServer: WSSer
       }
 
       // Extract machine info before stripping
-      const machineId = typeof body.machine_id === 'string' ? body.machine_id : undefined;
-      const machineName = typeof body.machine_name === 'string' ? body.machine_name : undefined;
-
-      // Strip sensitive fields
-      if (typeof body.cwd === 'string') {
-        body.cwd = basename(body.cwd);
-      }
-      if (typeof body.transcript_path === 'string') {
-        body.transcript_path = basename(body.transcript_path);
-      }
-      delete body.machine_id;
-      delete body.machine_name;
+      const machineId = safeIdentifier(input.machine_id, 64) ?? undefined;
+      const machineName = safeString(input.machine_name, 64) ?? undefined;
+      const body: Record<string, unknown> = {
+        session_id: sessionId, hook_event_name: hookEventName,
+        cwd: safeBasename(input.cwd), project: safeBasename(input.project),
+        agent_id: safeIdentifier(input.agent_id), agent_type: safeIdentifier(input.agent_type, 64),
+        tool_name: input.notification_type === 'permission_prompt' || input.tool_name === 'permission_prompt'
+          ? 'permission_prompt' : safeIdentifier(input.tool_name),
+      };
 
       const hasSession = sessionManager.hasSession(sessionId);
       // eslint-disable-next-line no-console

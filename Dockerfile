@@ -4,6 +4,7 @@ COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
 RUN npm run build
+RUN npm prune --omit=dev --ignore-scripts
 
 FROM node:22-slim
 WORKDIR /app
@@ -15,6 +16,7 @@ COPY --from=build /app/node_modules ./node_modules
 RUN mkdir -p /app/data && chown -R jobs:jobs /app/data
 ENV NODE_ENV=production
 ENV PORT=8780
+ENV HOST=0.0.0.0
 USER jobs
 EXPOSE 8780
 CMD ["node", "dist-server/server/index.js"]
