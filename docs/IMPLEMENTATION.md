@@ -20,7 +20,11 @@ the primary agent after review and validation.
   the intended audit threshold with no force upgrades.
 - [x] Integration: Node 22 tests/lint/build, production CSP/assets fallback,
   authenticated/empty/disconnected/mixed-provider browser checks, docs update.
-- [ ] Publish reviewable commits/PR and record CI results; no automatic merge or deployment.
+- [x] Publish reviewable commits/PR; no automatic merge or deployment.
+
+Published as [draft PR #4](https://github.com/maxthomas95/JOBS/pull/4). The PR's
+checks are the current CI record for its exact head; this document records the
+local validation baseline below.
 
 ## Ownership and integration
 
