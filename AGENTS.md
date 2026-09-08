@@ -38,9 +38,9 @@ surrounding controls useful for monitoring several sessions.
 - Claude JSONL -> watcher -> parser/adapter -> session manager -> normalized
   event/snapshot -> WebSocket -> Zustand -> animation/UI.
 - Claude hooks supplement the watcher. Generic webhooks create external agents.
-- **Current Codex integration is completion-only:** `server/hooks/codex-notify.js`
-  translates `notify` into `/api/webhooks`. It does not watch Codex transcripts
-  or stream live Codex tools. A mascot/badge does not imply provider feature parity.
+- Codex lifecycle hooks normalize through `server/codex-provider.ts`; legacy
+  `notify` remains completion-only. See `docs/codex.md` for supported events,
+  trust/setup, diagnostics, and limits. A badge does not imply provider parity.
 - `src/types/agent.ts` and `src/types/events.ts` are shared with the server.
   Browser and server modules run in separate processes; mutating client map
   configuration does not update the server's station capacity.
@@ -54,16 +54,16 @@ dependency changes. Avoid broad lockfile updates during unrelated work.
 npm ci
 npm run dev
 npm run lint
+npm test
 npm run build
-npm audit --audit-level=critical  # current CI threshold
-npm audit --audit-level=high      # useful additional triage
+npm audit --audit-level=high
 ```
 
 `npm run build` runs TypeScript project builds for the client/config and server.
 Root `npx tsc --noEmit` alone is not a replacement: root `tsconfig.json` has an
-empty files list and project references. There is currently no `npm test` script.
-For behavior changes, add focused regression coverage where it provides value;
-do not describe manual probes or lint as an existing automated test suite.
+empty files list and project references. `npm test` uses Node's test runner and
+tsx for synthetic regression fixtures under `tests/`. Keep tests isolated from
+the user's actual home/configuration, transcripts, stats, and running sessions.
 
 For isolated visual checks in PowerShell:
 
@@ -77,8 +77,8 @@ npm start
 
 Open `http://localhost:18780` to exercise the production frontend and CSP.
 Use a separate process/worktree so mock events do not affect real session stats.
-Default development is Vite 5173 + backend 8780; the current client hardcodes its
-development WebSocket URL, so changing only `PORT` does not reconfigure dev mode.
+Default development is Vite 5173 + backend 8780. Vite proxies the configured
+`PORT` and `WS_PATH`; the browser uses the same origin in development/production.
 
 ## Assets and UI checks
 
@@ -99,8 +99,12 @@ development WebSocket URL, so changing only `PORT` does not reconfigure dev mode
   object spread, basename on the wrong OS, or truncated string is not redaction.
 - Use synthetic fixtures to check event ingestion. Do not put real transcripts,
   tokens, private asset files, or runtime stats into documentation or tests.
-- The September review found holes in the existing privacy/auth implementation.
-  Do not repeat the old blanket claim that setting `JOBS_TOKEN` makes exposure safe.
+- `JOBS_TOKEN` enables viewer sign-in with a server-managed HttpOnly cookie.
+  Hook senders use bearer credentials. Generic webhooks inherit `JOBS_TOKEN`
+  unless `WEBHOOK_TOKEN` is configured. Never place tokens in HTML or URLs.
+- Loopback is the default bind/publish address. Network hosts require
+  `ALLOWED_HOSTS`; HTTPS proxies should preserve Host/Origin and set
+  `COOKIE_SECURE=true`. See README for deployment configuration.
 - Hook installers mutate user-level configuration. During tests use an isolated
   home/config directory; preserve existing integrations and never run setup against
   the user's actual configuration merely to review it.

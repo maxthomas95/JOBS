@@ -16,9 +16,9 @@ The root `AGENTS.md` applies here.
   Correlate parent/child events explicitly and tolerate events arriving out of order.
 - Timed removal must verify the same session generation is still leaving.
   Repeated start/stop, resurrection, and snapshots must agree on lifecycle state.
-- Server desk allocation and client map rendering need a shared selected layout.
-  The current client-only station setter does not configure this process.
-- `JOBS_TOKEN` and `WEBHOOK_TOKEN` currently protect different surfaces. Check
+- Server desk allocation and both renderers use `src/types/office-layout.ts`.
+  Keep station and access-lane changes shared, with reachability regression checks.
+- `WEBHOOK_TOKEN` optionally separates generic ingestion from `JOBS_TOKEN`. Check
   HTML, stats, WebSocket, hooks, and generic webhooks together for auth changes.
 - Keep notify delivery bounded and non-blocking for normal agent work. Surface
   setup/health failures through diagnostics rather than swallowing every failure.
@@ -27,5 +27,5 @@ The root `AGENTS.md` applies here.
 - Existing hooks are Claude-specific despite similar event names. A new Codex
   adapter needs explicit provider identity and its own normalization, rather than
   routing Codex payloads blindly into Claude session registration.
-- Use `npm run build` for the server TypeScript build. There is no existing test
-  runner; add narrow, meaningful regression tests for ingestion/privacy fixes.
+- Use `npm run build` for the server TypeScript build and `npm test` for synthetic
+  Node/tsx regressions. Close server/watcher/session/stats resources in fixtures.
