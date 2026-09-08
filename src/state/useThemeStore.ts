@@ -29,7 +29,7 @@ export const useThemeStore = create<ThemeState>()(
 
         setTheme: (id: string) => {
           const theme = getThemeById(id);
-          localStorage.setItem(STORAGE_KEY, theme.id);
+          try { localStorage.setItem(STORAGE_KEY, theme.id); } catch { /* Keep the theme in memory when storage is unavailable. */ }
           set({ theme }, false, 'setTheme');
         },
 
@@ -37,7 +37,7 @@ export const useThemeStore = create<ThemeState>()(
           const currentIdx = THEMES.findIndex((t) => t.id === get().theme.id);
           const nextIdx = (currentIdx + 1) % THEMES.length;
           const theme = THEMES[nextIdx];
-          localStorage.setItem(STORAGE_KEY, theme.id);
+          try { localStorage.setItem(STORAGE_KEY, theme.id); } catch { /* Keep the theme in memory when storage is unavailable. */ }
           set({ theme }, false, 'cycleTheme');
         },
       }),

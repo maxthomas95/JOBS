@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Application, Container, Color } from 'pixi.js';
 import { AnimationController } from './AnimationController.js';
 import { DayNightCycle } from './DayNightCycle.js';
@@ -28,6 +28,7 @@ try {
 export function PixelOffice() {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [renderStatus, setRenderStatus] = useState<'loading' | 'ready' | 'error'>('loading');
 
   useEffect(() => {
     if (!hostRef.current) {
@@ -45,6 +46,19 @@ export function PixelOffice() {
     let tiledRenderer: TiledMapRenderer | null = null;
     let fallbackRenderer: TilesetRenderer | null = null;
     let destroyed = false;
+    let initialized = false;
+    let disposed = false;
+    const dispose = () => {
+      if (disposed || !initialized) return;
+      disposed = true;
+      controller?.destroy();
+      followMode?.destroy();
+      tiledRenderer?.destroy();
+      fallbackRenderer?.destroy();
+      dayNight.destroy();
+      app.destroy(true, { children: true });
+      canvasRef.current = null;
+    };
 
     // Subscribe to theme changes for PixiJS background
     const unsubTheme = useThemeStore.subscribe(
@@ -67,9 +81,10 @@ export function PixelOffice() {
         resolution: window.devicePixelRatio,
         autoDensity: true,
       });
+      initialized = true;
 
       if (destroyed) {
-        app.destroy(true, { children: true });
+        dispose();
         return;
       }
 
@@ -90,6 +105,7 @@ export function PixelOffice() {
             { firstgid: 225, url: officeSheetUrl! },
           ]);
           await tiledRenderer.init();
+          if (destroyed) { tiledRenderer.destroy(); return; }
           tiledRenderer.renderMap(world);
 
           // Set stations and walkability for the Tiled layout
@@ -114,6 +130,7 @@ export function PixelOffice() {
         setWalkabilityFromConfig(mapConfig.walkability, mapConfig.gridWidth, mapConfig.gridHeight);
         fallbackRenderer = new ProceduralTilesetRenderer();
         await fallbackRenderer.init();
+        if (destroyed) { fallbackRenderer.destroy(); return; }
         fallbackRenderer.renderMap(world, mapConfig);
         console.log('[tileset] Using fallback MapConfig renderer');
       }
@@ -128,26 +145,22 @@ export function PixelOffice() {
       followMode = new FollowMode(app, world);
       controller = new AnimationController(app, agentsLayer, ambientLayer, dayNight, followMode);
       await controller.init();
-    })();
+      if (!destroyed) setRenderStatus('ready');
+    })().catch(() => {
+      if (!destroyed) setRenderStatus('error');
+      dispose();
+    });
 
     return () => {
       destroyed = true;
       unsubTheme();
-      controller?.destroy();
-      followMode?.destroy();
-      tiledRenderer?.destroy();
-      fallbackRenderer?.destroy();
-      dayNight.destroy();
-      app.destroy(true, { children: true });
-      canvasRef.current = null;
-      if (hostRef.current) {
-        hostRef.current.innerHTML = '';
-      }
+      dispose();
     };
   }, []);
 
   return (
     <div className="pixel-office" ref={hostRef}>
+      {renderStatus !== 'ready' && <div className="office-render-status" role="status">{renderStatus === 'loading' ? 'Opening the office…' : 'The office could not render. Session activity is still available in the roster.'}</div>}
       <BubbleOverlay canvasRef={canvasRef} />
     </div>
   );

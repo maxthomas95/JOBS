@@ -1,359 +1,82 @@
-import { useState, useEffect, useCallback } from 'react';
-import { ConnectionStatus } from './ConnectionStatus.js';
+﻿import { useState } from 'react';
 import { useOfficeStore } from '../state/useOfficeStore.js';
-import { useEventStore } from '../state/useEventStore.js';
-import { useAudioStore } from '../state/useAudioStore.js';
-import { useDayNightStore } from '../state/useDayNightStore.js';
-import { useThemeStore } from '../state/useThemeStore.js';
-import { groupByMachine } from '../state/useOfficeStore.js';
+import { useConnectionStore } from '../state/useConnectionStore.js';
 import type { Agent } from '../types/agent.js';
-import type { PixelEvent } from '../types/events.js';
-import { STATE_LABELS } from './stateLabels.js';
+import { STATE_COLORS } from './stateLabels.js';
+import { agentName, integrationLabel, lastActivity, needsAttention, providerName, statusLabel } from './sessionPresentation.js';
+import { ProviderAvatar } from './ProviderAvatar.js';
+import { useNow } from './useNow.js';
 
-
-function formatUptime(startMs: number, nowMs: number): string {
-  const secs = Math.max(0, Math.floor((nowMs - startMs) / 1000));
-  if (secs < 60) return `${secs}s`;
-  const mins = Math.floor(secs / 60);
-  if (mins < 60) return `${mins}m`;
-  const hrs = Math.floor(mins / 60);
-  return `${hrs}h ${mins % 60}m`;
-}
-
-const CHARACTER_COLORS = [
-  '#4fc3f7', '#81c784', '#ffb74d', '#e57373',
-  '#ba68c8', '#4dd0e1', '#fff176', '#f06292',
-];
-
-/** Resolve a session ID to its display name, falling back to short ID */
-function agentLabel(agents: Map<string, Agent>, sessionId: string): string {
-  const agent = agents.get(sessionId);
-  return agent?.name || sessionId.slice(0, 6);
-}
-
-function formatFeedItem(event: PixelEvent, agents: Map<string, Agent>): string {
-  const label = agentLabel(agents, event.sessionId);
-  if (event.type === 'tool') {
-    const ctx = event.context ? ` ${event.context}` : '';
-    return `[${label}] ${event.tool}${ctx}`;
-  }
-  if (event.type === 'activity') {
-    return `[${label}] ${event.action}`;
-  }
-  if (event.type === 'session') {
-    return `[${label}] session.${event.action}`;
-  }
-  if (event.type === 'agent') {
-    return `[${label}] agent.${event.action}`;
-  }
-  return `[${label}] ${event.type}`;
-}
-
-function truncate(text: string, max: number): string {
-  return text.length > max ? text.slice(0, max) + '...' : text;
-}
-
-function providerBadge(agent: Agent): React.ReactNode {
-  if (agent.provider === 'codex') {
-    return <span className="provider-badge codex">CODEX</span>;
-  }
-  if (agent.provider === 'webhook') {
-    if (agent.sourceType === 'ci') return <span className="provider-badge ci">CI</span>;
-    if (agent.sourceType === 'deploy') return <span className="provider-badge deploy">DEPLOY</span>;
-    if (agent.sourceType === 'monitoring') return <span className="provider-badge monitor">MONITOR</span>;
-    return <span className="provider-badge webhook">WEBHOOK</span>;
-  }
-  return null;
-}
-
-/** Check if agent is a supervisor with active children */
-function isSupervisor(agent: Agent, agentMap: Map<string, Agent>): boolean {
-  return agent.childIds.filter((id) => agentMap.has(id)).length > 0;
-}
-
-/** Group agents by project, nesting teams: supervisors first with children below, then standalone */
-function groupByProject(agents: Agent[], agentMap: Map<string, Agent>): Map<string, Agent[]> {
+export function HUD({ onSetup }: { onSetup: () => void }) {
+  const agents = useOfficeStore((s) => s.agents);
+  const selectedId = useOfficeStore((s) => s.selectedAgentId);
+  const groupMode = useOfficeStore((s) => s.groupMode);
+  const setGroupMode = useOfficeStore((s) => s.setGroupMode);
+  const machines = useOfficeStore((s) => s.machines);
+  const status = useConnectionStore((s) => s.status);
+  const now = useNow();
+  const [query, setQuery] = useState('');
+  const [provider, setProvider] = useState('all');
+  const [stateFilter, setStateFilter] = useState('all');
+  const [attentionOnly, setAttentionOnly] = useState(false);
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const list = [...agents.values()];
+  const attentionCount = list.filter(needsAttention).length;
+  const filtered = list.filter((agent) => {
+    const matchesQuery = `${agentName(agent)} ${agent.project || ''} ${agent.machineName || ''} ${agent.sessionId}`.toLowerCase().includes(query.toLowerCase().trim());
+    const active = !['idle', 'cooling', 'waiting', 'leaving'].includes(agent.state);
+    return matchesQuery && (provider === 'all' || agent.provider === provider)
+      && (!attentionOnly || needsAttention(agent))
+      && (stateFilter === 'all' || (stateFilter === 'active' && active) || (stateFilter === 'idle' && !active) || (stateFilter === 'error' && agent.state === 'error'));
+  }).sort((a, b) => Number(needsAttention(b)) - Number(needsAttention(a)) || agentName(a).localeCompare(agentName(b)) || a.id.localeCompare(b.id));
   const groups = new Map<string, Agent[]>();
-  for (const agent of agents) {
-    const key = agent.project || 'Unknown';
-    const list = groups.get(key);
-    if (list) {
-      list.push(agent);
-    } else {
-      groups.set(key, [agent]);
-    }
+  for (const agent of filtered) {
+    const group = groupMode === 'machine' ? agent.machineName || 'Local machine' : agent.project || 'Other sessions';
+    groups.set(group, [...(groups.get(group) || []), agent]);
   }
-  // Reorder: [supervisor1, ...children1, supervisor2, ...children2, ...standalone]
-  for (const [key, list] of groups.entries()) {
-    const supervisors: Agent[] = [];
-    const childrenByParent = new Map<string, Agent[]>();
-    const standalone: Agent[] = [];
-
-    for (const agent of list) {
-      if (isSupervisor(agent, agentMap)) {
-        supervisors.push(agent);
-      } else if (agent.parentId && agentMap.has(agent.parentId)) {
-        // Only nest under parent if parent is in the SAME project group;
-        // otherwise the child vanishes (parent isn't iterated in this group).
-        const parent = agentMap.get(agent.parentId)!;
-        if ((parent.project || 'Unknown') === key) {
-          const siblings = childrenByParent.get(agent.parentId) ?? [];
-          siblings.push(agent);
-          childrenByParent.set(agent.parentId, siblings);
-        } else {
-          standalone.push(agent);
-        }
-      } else {
-        standalone.push(agent);
-      }
-    }
-
-    // Sort within sub-groups: waiting-for-human first
-    const waitingFirst = (a: Agent, b: Agent) =>
-      a.waitingForHuman === b.waitingForHuman ? 0 : a.waitingForHuman ? -1 : 1;
-    supervisors.sort(waitingFirst);
-    standalone.sort(waitingFirst);
-
-    const ordered: Agent[] = [];
-    for (const sup of supervisors) {
-      ordered.push(sup);
-      const children = childrenByParent.get(sup.id) ?? [];
-      children.sort(waitingFirst);
-      ordered.push(...children);
-    }
-    ordered.push(...standalone);
-    groups.set(key, ordered);
+  function select(agent: Agent) {
+    const store = useOfficeStore.getState();
+    store.selectAgent(agent.id);
+    if (agent.childIds.some((id) => agents.has(id))) store.focusTeam(agent.id);
+    else store.focusAgent(agent.id);
   }
-  return groups;
-}
-
-export function HUD() {
-  const agents = useOfficeStore((state) => state.agents);
-  const machines = useOfficeStore((state) => state.machines);
-  const groupMode = useOfficeStore((state) => state.groupMode);
-  const setGroupMode = useOfficeStore((state) => state.setGroupMode);
-  const focusAgent = useOfficeStore((state) => state.focusAgent);
-  const focusTeam = useOfficeStore((state) => state.focusTeam);
-  const selectAgent = useOfficeStore((state) => state.selectAgent);
-  const followedAgentId = useOfficeStore((state) => state.followedAgentId);
-  const followAgent = useOfficeStore((state) => state.followAgent);
-  const unfollowAgent = useOfficeStore((state) => state.unfollowAgent);
-  const notificationsEnabled = useOfficeStore((state) => state.notificationsEnabled);
-  const toggleNotifications = useOfficeStore((state) => state.toggleNotifications);
-  const events = useEventStore((state) => state.events);
-  const audioEnabled = useAudioStore((state) => state.enabled);
-  const audioVolume = useAudioStore((state) => state.volume);
-  const toggleAudio = useAudioStore((state) => state.toggleEnabled);
-  const setAudioVolume = useAudioStore((state) => state.setVolume);
-  const dayNightEnabled = useDayNightStore((state) => state.enabled);
-  const toggleDayNight = useDayNightStore((state) => state.toggleEnabled);
-  const themeLabel = useThemeStore((state) => state.theme.label);
-  const cycleTheme = useThemeStore((state) => state.cycleTheme);
-  const count = agents.size;
-  const allAgents = Array.from(agents.values());
-  const multiMachine = machines.size > 1;
-  const showMachineMode = multiMachine && groupMode === 'machine';
-  const projectGroups = showMachineMode ? null : groupByProject(allAgents, agents);
-  const machineGroups = showMachineMode ? groupByMachine(allAgents) : null;
-  const activeGroups = showMachineMode ? machineGroups! : projectGroups!;
-  const multipleGroups = activeGroups.size > 1;
-  const recentEvents = events.slice(0, 5);
-
-  const [now, setNow] = useState(() => Date.now());
-  const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set());
-  useEffect(() => {
-    const id = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(id);
-  }, []);
-
-  const toggleProject = useCallback((project: string) => {
-    setCollapsedProjects((prev) => {
-      const next = new Set(prev);
-      if (next.has(project)) {
-        next.delete(project);
-      } else {
-        next.add(project);
-      }
-      return next;
-    });
-  }, []);
-
-  const renderAgentRow = (agent: Agent) => {
-    const isChild = !!agent.parentId;
-    const parentName = isChild ? (agents.get(agent.parentId!)?.name || agent.parentId!.slice(0, 6)) : null;
-    const activeChildren = agent.childIds.filter((id) => agents.has(id)).length;
-    const supervisor = isSupervisor(agent, agents);
-    const isFollowed = followedAgentId === agent.id;
-    const rowClasses = `agent-row${isChild ? ' agent-child' : ''}${supervisor ? ' supervisor' : ''}${isFollowed ? ' following' : ''}`;
-
-    const handleClick = () => {
-      if (supervisor) {
-        focusTeam(agent.id);
-      } else {
-        focusAgent(agent.id);
-      }
-      selectAgent(agent.id);
-    };
-
-    const handleFollow = (e: React.MouseEvent) => {
-      e.stopPropagation();
-      if (isFollowed) {
-        unfollowAgent();
-      } else {
-        followAgent(agent.id);
-      }
-    };
-
-    return (
-      <div key={agent.id} className={rowClasses} onClick={handleClick}>
-        <span
-          className="agent-dot"
-          style={{ background: CHARACTER_COLORS[agent.characterIndex % 8] }}
-        />
-        <span className="agent-name">{agent.name || agent.id.slice(0, 8)}</span>
-        {providerBadge(agent)}
-        {supervisor ? (
-          <span className="supervisor-badge">LEAD</span>
-        ) : null}
-        {isChild ? (
-          <span className="agent-parent-tag">{parentName}</span>
-        ) : null}
-        {multiMachine && !showMachineMode && agent.machineId ? (() => {
-          const machine = machines.get(agent.machineId);
-          return machine ? (
-            <span className="machine-dot" style={{ background: machine.color }} title={machine.name} />
-          ) : null;
-        })() : null}
-        <span className="agent-state">{STATE_LABELS[agent.state]}</span>
-        {agent.activityText ? (
-          <span className="agent-activity">{truncate(agent.activityText, 20)}</span>
-        ) : null}
-        {supervisor ? (
-          <span className="team-progress">{activeChildren}/{agent.childIds.length} active</span>
-        ) : null}
-        {agent.waitingForHuman ? (
-          <span className="waiting-badge">NEEDS INPUT</span>
-        ) : null}
-        <button
-          className={`follow-btn${isFollowed ? ' active' : ''}`}
-          onClick={handleFollow}
-          title={isFollowed ? 'Stop following' : 'Follow this agent'}
-        >
-          {isFollowed ? 'FOLLOWING' : 'FOLLOW'}
-        </button>
-        <span className="agent-uptime">{formatUptime(agent.lastEventAt, now)}</span>
-      </div>
-    );
-  };
-
-  const followedAgent = followedAgentId ? agents.get(followedAgentId) : null;
-
-  return (
-    <div className="hud-overlay">
-      <header className="hud-header">
-        <h1>J.O.B.S. ONLINE</h1>
-        <div className="hud-header-right">
-          <button
-            className="hud-toggle audio-toggle"
-            onClick={toggleAudio}
-            title={audioEnabled ? 'Mute audio' : 'Enable audio'}
-          >
-            {audioEnabled ? 'SFX ON' : 'SFX OFF'}
-          </button>
-          {audioEnabled ? (
-            <input
-              type="range"
-              className="audio-volume"
-              min={0}
-              max={100}
-              value={audioVolume}
-              onChange={(e) => setAudioVolume(Number(e.target.value))}
-              title={`Volume: ${audioVolume}%`}
-            />
-          ) : null}
-          <button
-            className="hud-toggle daynight-toggle"
-            onClick={toggleDayNight}
-            title={dayNightEnabled ? 'Disable day/night cycle' : 'Enable day/night cycle'}
-          >
-            {dayNightEnabled ? 'D/N ON' : 'D/N OFF'}
-          </button>
-          <button
-            className="hud-toggle notification-toggle"
-            onClick={toggleNotifications}
-            title={notificationsEnabled ? 'Disable notifications' : 'Enable notifications'}
-          >
-            {notificationsEnabled ? 'NOTIF ON' : 'NOTIF OFF'}
-          </button>
-          <button
-            className="hud-toggle theme-toggle"
-            onClick={cycleTheme}
-            title="Cycle theme"
-          >
-            {themeLabel}
-          </button>
-          <ConnectionStatus />
-        </div>
-      </header>
-
-      <div className="agent-count">Active sessions: {count}</div>
-
-      {multiMachine ? (
-        <div className="group-toggle">
-          <button className={groupMode === 'project' ? 'active' : ''} onClick={() => setGroupMode('project')}>Project</button>
-          <button className={groupMode === 'machine' ? 'active' : ''} onClick={() => setGroupMode('machine')}>Machine</button>
-        </div>
-      ) : null}
-
-      {allAgents.length > 0 ? (
-        <div className="agent-list">
-          {Array.from(activeGroups.entries()).map(([groupKey, groupAgents]) => {
-            const machineInfo = showMachineMode ? machines.get(groupKey) : null;
-            const headerLabel = showMachineMode
-              ? (machineInfo?.name || (groupKey === 'local' ? 'Local' : groupKey))
-              : groupKey;
-            return (
-              <div key={groupKey} className="project-group">
-                {multipleGroups ? (
-                  <div
-                    className="project-header"
-                    onClick={() => toggleProject(groupKey)}
-                  >
-                    <span className="project-toggle">{collapsedProjects.has(groupKey) ? '+' : '-'}</span>
-                    {machineInfo ? (
-                      <span className="machine-dot" style={{ background: machineInfo.color }} />
-                    ) : null}
-                    <span className="project-name">{headerLabel}</span>
-                    <span className="project-count">{groupAgents.length}</span>
-                  </div>
-                ) : null}
-                {!collapsedProjects.has(groupKey) ? groupAgents.map(renderAgentRow) : null}
-              </div>
-            );
-          })}
-        </div>
-      ) : null}
-
-      {count === 0 ? (
-        <div className="empty-state">No active sessions - watching for Claude Code activity...</div>
-      ) : null}
-
-      {recentEvents.length > 0 ? (
-        <div className="activity-feed">
-          {recentEvents.map((ev) => (
-            <div key={ev.id} className="feed-item">
-              {formatFeedItem(ev, agents)}
-            </div>
-          ))}
-        </div>
-      ) : null}
-
-      {followedAgent ? (
-        <div className="follow-indicator">
-          <span>Following: {followedAgent.name || followedAgent.id.slice(0, 8)}</span>
-          <button onClick={unfollowAgent} className="follow-stop">&times;</button>
-        </div>
-      ) : null}
+  return <aside className="session-rail" id="sessions" aria-labelledby="sessions-heading" tabIndex={-1}>
+    <div className="section-heading"><h2 id="sessions-heading">Sessions</h2><span className="muted">{agents.size}</span></div>
+    <label className="sr-only" htmlFor="session-search">Search sessions</label>
+    <input id="session-search" type="search" placeholder="Search sessions or projects" value={query} onChange={(event) => setQuery(event.target.value)} />
+    <button className="attention-filter" aria-pressed={attentionOnly} onClick={() => setAttentionOnly(!attentionOnly)}><span>Needs attention</span><strong>{attentionCount}</strong></button>
+    <div className="roster-filters">
+      <label><span className="sr-only">Provider</span><select aria-label="Provider" value={provider} onChange={(event) => setProvider(event.target.value)}>
+        <option value="all">All providers</option><option value="claude">Claude</option><option value="codex">Codex</option><option value="webhook">Webhooks</option>
+      </select></label>
+      <label><span className="sr-only">Status</span><select aria-label="Status" value={stateFilter} onChange={(event) => setStateFilter(event.target.value)}>
+        <option value="all">All statuses</option><option value="active">Active</option><option value="idle">At rest</option><option value="error">Errors</option>
+      </select></label>
     </div>
-  );
+    {machines.size > 1 && <label className="group-choice">Group by <select value={groupMode} onChange={(event) => setGroupMode(event.target.value as 'project' | 'machine')}><option value="project">Project</option><option value="machine">Machine</option></select></label>}
+    <div className="session-list">
+      {[...groups].map(([group, members]) => <section className="session-group" key={group}>
+        <button className="group-heading" aria-expanded={!collapsed.has(group)} onClick={() => setCollapsed((previous) => {
+          const next = new Set(previous); if (next.has(group)) next.delete(group); else next.add(group); return next;
+        })}><span>{collapsed.has(group) ? '›' : '⌄'} {group}</span><span>{members.length}</span></button>
+        {!collapsed.has(group) && members.map((agent) => <button key={agent.id} data-session-id={agent.id} className="session-row" aria-pressed={selectedId === agent.id} aria-controls="session-inspector" onClick={() => select(agent)}>
+          <ProviderAvatar agent={agent} /><span className="session-copy">
+            <span className="session-name">{agentName(agent)}</span>
+            <span className="session-provider">{providerName(agent)}<span>{integrationLabel(agent)}</span></span>
+            <span className="session-status"><span className="state-dot" style={{ background: STATE_COLORS[agent.state] }} /><span className={needsAttention(agent) ? 'attention-text' : ''}>{statusLabel(agent)}</span></span>
+            {agent.activityText && <span className="session-context">{agent.activityText}</span>}
+            <span className="session-time">Last activity {lastActivity(agent.lastEventAt, now).toLowerCase()}</span>
+            {agent.parentId && <span className="session-relationship">Child of {agents.has(agent.parentId) ? agentName(agents.get(agent.parentId)!) : 'ended session'}</span>}
+            {agent.childIds.length > 0 && <span className="session-relationship">Team lead · {agent.childIds.filter((id) => agents.has(id)).length} active children</span>}
+          </span>
+        </button>)}
+      </section>)}
+      {!filtered.length && <div className="roster-empty">
+        <h3>{list.length ? 'No matching sessions' : status === 'connected' ? 'The office is ready' : 'Waiting for connection'}</h3>
+        <p>{list.length ? 'Try another search or clear your filters.' : status === 'connected' ? 'Start a monitored Claude or Codex session to see it here.' : 'Sessions appear when the monitoring server connects.'}</p>
+        {list.length ? <button onClick={() => { setQuery(''); setProvider('all'); setStateFilter('all'); setAttentionOnly(false); }}>Clear filters</button> : <button onClick={onSetup}>Connection & setup</button>}
+      </div>}
+    </div>
+    <p className="rail-note">{filtered.length} of {agents.size} sessions shown. Select a session to inspect its activity.</p>
+  </aside>;
 }

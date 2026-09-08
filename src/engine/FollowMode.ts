@@ -1,6 +1,7 @@
 import { Application, Container } from 'pixi.js';
 import { useOfficeStore } from '../state/useOfficeStore.js';
 import { spritePositions } from './AgentSprite.js';
+import { prefersReducedMotion } from '../state/useMotionStore.js';
 
 /** Custom events dispatched on window for HUD to listen to. */
 const ENTER_EVENT = 'follow-enter';
@@ -109,6 +110,13 @@ export class FollowMode {
     const screenW = this.app.screen.width;
     const screenH = this.app.screen.height;
 
+    if (prefersReducedMotion()) {
+      this.stage.scale.set(FOLLOW_ZOOM);
+      this.stage.pivot.set(targetWorldX, targetWorldY);
+      this.stage.position.set(screenW / 2, screenH / 2);
+      return;
+    }
+
     // Add gentle drift around the followed agent
     const driftX = Math.sin(this.elapsedTime * 0.12) * 4;
     const driftY = Math.cos(this.elapsedTime * 0.09) * 3;
@@ -131,7 +139,7 @@ export class FollowMode {
   /** Smoothly lerp back to default camera position on exit. */
   private lerpToDefault(): void {
     const s = this.stage;
-    const f = EXIT_LERP_FACTOR;
+    const f = prefersReducedMotion() ? 1 : EXIT_LERP_FACTOR;
 
     s.scale.x += (this.defaultScale - s.scale.x) * f;
     s.scale.y += (this.defaultScale - s.scale.y) * f;
